@@ -1,0 +1,45 @@
+application:
+
+  name: Investment Analyzer
+
+  version: 11.0.0
+
+  environment: development
+
+  timezone: America/Mexico_City
+
+  language: es
+
+analysis:
+
+  default_profile: balanced
+
+  use_cache: true
+
+  use_database: true
+
+  parallel_execution: true
+
+  max_workers: 8
+
+providers:
+
+  auto_fallback: true
+
+  validate_data: true
+
+database:
+
+  sqlite_file: database/investment_analyzer.db
+
+cache:
+
+  enabled: true
+
+reports:
+
+  output_directory: output
+
+logging:
+
+  level: INFO

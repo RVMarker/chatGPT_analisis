@@ -1,0 +1,71 @@
+providers:
+
+  yahoo:
+
+    enabled: true
+
+    priority: 1
+
+    timeout: 20
+
+    retries: 3
+
+    capabilities:
+
+      price: true
+
+      history: true
+
+      balance_sheet: true
+
+      income_statement: true
+
+      cash_flow: true
+
+      dividends: true
+
+      news: true
+
+      options: true
+
+      insiders: true
+
+      institutional: true
+
+  fmp:
+
+    enabled: true
+
+    priority: 2
+
+    timeout: 20
+
+    retries: 3
+
+    capabilities:
+
+      price: true
+
+      fundamentals: true
+
+      financial_ratios: true
+
+      insiders: true
+
+      estimates: true
+
+  alpha_vantage:
+
+    enabled: false
+
+    priority: 3
+
+    timeout: 30
+
+  polygon:
+
+    enabled: false
+
+    priority: 4
+
+    timeout: 30

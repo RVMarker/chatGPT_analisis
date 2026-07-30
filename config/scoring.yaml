@@ -1,0 +1,49 @@
+decision:
+
+  buy:
+
+    minimum_score: 80
+
+  accumulate:
+
+    minimum_score: 70
+
+  hold:
+
+    minimum_score: 55
+
+  reduce:
+
+    minimum_score: 40
+
+  sell:
+
+    minimum_score: 0
+
+confidence:
+
+  excellent: 90
+
+  high: 80
+
+  medium: 65
+
+  low: 50
+
+risk:
+
+  altman:
+
+    excellent: 3.0
+
+    acceptable: 2.6
+
+    warning: 1.8
+
+piotroski:
+
+  excellent: 8
+
+  good: 6
+
+  weak: 4

@@ -1,0 +1,37 @@
+profiles:
+
+  conservative:
+
+    strategic_weight: 0.80
+
+    tactical_weight: 0.20
+
+    minimum_confidence: 85
+
+    minimum_margin_of_safety: 30
+
+    max_position_size: 5
+
+  balanced:
+
+    strategic_weight: 0.60
+
+    tactical_weight: 0.40
+
+    minimum_confidence: 75
+
+    minimum_margin_of_safety: 20
+
+    max_position_size: 8
+
+  aggressive:
+
+    strategic_weight: 0.40
+
+    tactical_weight: 0.60
+
+    minimum_confidence: 60
+
+    minimum_margin_of_safety: 10
+
+    max_position_size: 15

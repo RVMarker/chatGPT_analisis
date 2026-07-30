@@ -1,0 +1,31 @@
+strategic:
+
+  valuation: 0.30
+
+  fundamentals: 0.35
+
+  comparables: 0.10
+
+  macro: 0.05
+
+  risk: 0.20
+
+tactical:
+
+  technical: 0.45
+
+  sentiment: 0.20
+
+  smart_money: 0.20
+
+  macro: 0.15
+
+confidence:
+
+  data_quality: 0.30
+
+  provider_consensus: 0.20
+
+  model_consistency: 0.30
+
+  data_recency: 0.20

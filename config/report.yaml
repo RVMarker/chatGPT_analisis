@@ -1,0 +1,27 @@
+report:
+
+  language: es
+
+  theme: dark
+
+  include_logo: true
+
+  include_charts: true
+
+  include_appendix: true
+
+formats:
+
+  html: true
+
+  pdf: true
+
+  docx: true
+
+  json: true
+
+charts:
+
+  dpi: 200
+
+  interactive: true
