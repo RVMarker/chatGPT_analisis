@@ -1,45 +1,21 @@
-"""
-decision_engine.py
-Investment Analyzer v11
+"""Transparent V11 decision engine.
 
-Motor de decisión transparente basado en puntuaciones ponderadas.
-
-Compatible con la v10.
+Strategic horizon: years. Tactical horizon: weeks.
+Comparables and macro are contextual evidence only and never vote in either
+verdict. This prevents double-counting valuation context and makes the score
+explainable.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Mapping
+
+from .decision_weights import STRATEGIC, TACTICAL, validate_weights
 
 
-# ----------------------------------------------------------------------
-# CONFIGURACIÓN
-# ----------------------------------------------------------------------
-
-STRATEGIC_WEIGHTS = {
-    "fundamental": 0.35,
-    "valuation": 0.30,
-    "comparables": 0.10,
-    "macro": 0.05,
-    "risk": 0.20,
-}
-
-TACTICAL_WEIGHTS = {
-    "technical": 0.45,
-    "sentiment": 0.20,
-    "smart_money": 0.20,
-    "macro": 0.15,
-}
-
-
-# ----------------------------------------------------------------------
-# MODELOS
-# ----------------------------------------------------------------------
-
-@dataclass
+@dataclass(slots=True)
 class ScoreComponent:
-
     name: str
     score: float
     weight: float
@@ -50,108 +26,63 @@ class ScoreComponent:
         return self.score * self.weight
 
 
-@dataclass
+@dataclass(slots=True)
 class DecisionResult:
-
     strategic_score: float
-
     tactical_score: float
-
     strategic_decision: str
-
     tactical_decision: str
-
     confidence: float
+    strategic_breakdown: list[ScoreComponent] = field(default_factory=list)
+    tactical_breakdown: list[ScoreComponent] = field(default_factory=list)
+    red_flags: list[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    contextual: dict[str, float] = field(default_factory=dict)
 
-    strategic_breakdown: List[ScoreComponent] = field(default_factory=list)
-
-    tactical_breakdown: List[ScoreComponent] = field(default_factory=list)
-
-    red_flags: List[str] = field(default_factory=list)
-
-    strengths: List[str] = field(default_factory=list)
-
-
-# ----------------------------------------------------------------------
-# ENGINE
-# ----------------------------------------------------------------------
 
 class DecisionEngine:
+    """Convert normalized 0-100 evidence into transparent verdicts."""
 
-    BUY = 80
+    BUY = 80.0
+    ACCUMULATE = 70.0
+    HOLD = 55.0
+    REDUCE = 40.0
 
-    ACCUMULATE = 70
+    def __init__(self) -> None:
+        validate_weights()
 
-    HOLD = 55
-
-    REDUCE = 40
-
-    @staticmethod
-    def _decision(score: float) -> str:
-
-        if score >= DecisionEngine.BUY:
+    @classmethod
+    def _decision(cls, score: float) -> str:
+        if score >= cls.BUY:
             return "COMPRAR"
-
-        if score >= DecisionEngine.ACCUMULATE:
+        if score >= cls.ACCUMULATE:
             return "ACUMULAR"
-
-        if score >= DecisionEngine.HOLD:
+        if score >= cls.HOLD:
             return "MANTENER"
-
-        if score >= DecisionEngine.REDUCE:
+        if score >= cls.REDUCE:
             return "REDUCIR"
-
         return "VENDER"
 
-    # --------------------------------------------------------------
+    @staticmethod
+    def _score(value: object, default: float = 50.0) -> float:
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = default
+        return max(0.0, min(100.0, value))
 
-    def strategic(self, data: Dict[str, float]):
+    def _weighted(self, data: Mapping[str, object], weights: Mapping[str, float]):
+        items: list[ScoreComponent] = []
+        for key, weight in weights.items():
+            score = self._score(data.get(key, 50.0))
+            items.append(ScoreComponent(key, score, weight))
+        return sum(item.weighted for item in items), items
 
-        items = []
+    def strategic(self, data: Mapping[str, object]):
+        return self._weighted(data, STRATEGIC)
 
-        total = 0.0
-
-        for key, weight in STRATEGIC_WEIGHTS.items():
-
-            value = float(data.get(key, 50))
-
-            component = ScoreComponent(
-                name=key,
-                score=value,
-                weight=weight,
-            )
-
-            items.append(component)
-
-            total += component.weighted
-
-        return total, items
-
-    # --------------------------------------------------------------
-
-    def tactical(self, data: Dict[str, float]):
-
-        items = []
-
-        total = 0.0
-
-        for key, weight in TACTICAL_WEIGHTS.items():
-
-            value = float(data.get(key, 50))
-
-            component = ScoreComponent(
-                name=key,
-                score=value,
-                weight=weight,
-            )
-
-            items.append(component)
-
-            total += component.weighted
-
-        return total, items
-
-    # --------------------------------------------------------------
+    def tactical(self, data: Mapping[str, object]):
+        return self._weighted(data, TACTICAL)
 
     @staticmethod
     def confidence(
@@ -159,160 +90,74 @@ class DecisionEngine:
         freshness: float,
         consistency: float,
         completeness: float,
-    ):
-
+    ) -> float:
+        values = [provider_quality, freshness, consistency, completeness]
+        values = [max(0.0, min(100.0, float(v))) for v in values]
         return round(
-
-            provider_quality * 0.30
-            + freshness * 0.20
-            + consistency * 0.30
-            + completeness * 0.20,
-
+            values[0] * 0.30
+            + values[1] * 0.20
+            + values[2] * 0.30
+            + values[3] * 0.20,
             2,
-
         )
-
-    # --------------------------------------------------------------
 
     def evaluate(
-
         self,
-
-        strategic_scores: Dict[str, float],
-
-        tactical_scores: Dict[str, float],
-
-        confidence_inputs: Dict[str, float],
-
-        strengths=None,
-
-        red_flags=None,
-
+        strategic_scores: Mapping[str, object],
+        tactical_scores: Mapping[str, object],
+        confidence_inputs: Mapping[str, object],
+        strengths: list[str] | None = None,
+        red_flags: list[str] | None = None,
+        contextual: Mapping[str, object] | None = None,
     ) -> DecisionResult:
-
         strategic_total, strategic_items = self.strategic(strategic_scores)
-
         tactical_total, tactical_items = self.tactical(tactical_scores)
-
         confidence = self.confidence(
-
-            provider_quality=confidence_inputs.get(
-                "provider_quality",
-                80,
-            ),
-
-            freshness=confidence_inputs.get(
-                "freshness",
-                80,
-            ),
-
-            consistency=confidence_inputs.get(
-                "consistency",
-                80,
-            ),
-
-            completeness=confidence_inputs.get(
-                "completeness",
-                80,
-            ),
-
+            confidence_inputs.get("provider_quality", 80),
+            confidence_inputs.get("freshness", 80),
+            confidence_inputs.get("consistency", 80),
+            confidence_inputs.get("completeness", 80),
         )
-
+        context = {
+            key: self._score(value)
+            for key, value in (contextual or {}).items()
+        }
         return DecisionResult(
-
             strategic_score=round(strategic_total, 2),
-
             tactical_score=round(tactical_total, 2),
-
             strategic_decision=self._decision(strategic_total),
-
             tactical_decision=self._decision(tactical_total),
-
             confidence=confidence,
-
             strategic_breakdown=strategic_items,
-
             tactical_breakdown=tactical_items,
-
-            strengths=strengths or [],
-
-            red_flags=red_flags or [],
-
+            strengths=list(strengths or []),
+            red_flags=list(red_flags or []),
+            contextual=context,
         )
-
-    # --------------------------------------------------------------
 
     @staticmethod
-    def print_summary(result: DecisionResult):
-
+    def print_summary(result: DecisionResult) -> None:
         print("=" * 80)
-
-        print("DECISION ENGINE")
-
+        print("DECISION ENGINE V11")
         print("=" * 80)
-
-        print()
-
-        print(f"Estrategico : {result.strategic_decision}")
-
-        print(f"Puntuacion  : {result.strategic_score:.2f}")
-
-        print()
-
-        print(f"Tactico     : {result.tactical_decision}")
-
-        print(f"Puntuacion  : {result.tactical_score:.2f}")
-
-        print()
-
-        print(f"Confianza   : {result.confidence:.1f}%")
-
-        print()
-
-        print("DESGLOSE ESTRATEGICO")
-
-        print("-" * 80)
-
+        print(f"Estratégico (años): {result.strategic_decision} | {result.strategic_score:.2f}/100")
+        print(f"Táctico (semanas):  {result.tactical_decision} | {result.tactical_score:.2f}/100")
+        print(f"Confianza:          {result.confidence:.1f}%")
+        print("\nDESGLOSE ESTRATÉGICO")
         for item in result.strategic_breakdown:
-
-            print(
-                f"{item.name:15s}"
-                f"{item.score:8.2f}"
-                f"{item.weighted:10.2f}"
-            )
-
-        print()
-
-        print("DESGLOSE TACTICO")
-
-        print("-" * 80)
-
+            print(f"  {item.name:15s} score={item.score:6.2f} peso={item.weight:.0%} aporte={item.weighted:6.2f}")
+        print("\nDESGLOSE TÁCTICO")
         for item in result.tactical_breakdown:
-
-            print(
-                f"{item.name:15s}"
-                f"{item.score:8.2f}"
-                f"{item.weighted:10.2f}"
-            )
-
-        print()
-
+            print(f"  {item.name:15s} score={item.score:6.2f} peso={item.weight:.0%} aporte={item.weighted:6.2f}")
+        if result.contextual:
+            print("\nCONTEXTO (NO VOTA)")
+            for key, value in result.contextual.items():
+                print(f"  {key:15s} {value:6.2f}")
         if result.strengths:
-
-            print("FORTALEZAS")
-
-            for s in result.strengths:
-
-                print(" +", s)
-
-            print()
-
+            print("\nFORTALEZAS")
+            for item in result.strengths:
+                print(f"  + {item}")
         if result.red_flags:
-
-            print("RED FLAGS")
-
-            for s in result.red_flags:
-
-                print(" -", s)
-
-            print()
+            print("\nRED FLAGS")
+            for item in result.red_flags:
+                print(f"  - {item}")
