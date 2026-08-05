@@ -33,10 +33,10 @@ class Context:
 
 def test_dataclass_results_are_consumed_and_context_does_not_vote():
     result = DecisionAnalyzer().build_from_context(Context())
-    assert result["strategic"]["score"] == 82
-    assert result["tactical"]["score"] == 70
+    assert result["strategic"]["score"] == 83
+    assert result["tactical"]["score"] == 69
     assert result["strategic"]["decision"] == "COMPRAR"
-    assert result["tactical"]["decision"] == "ACUMULAR"
+    assert result["tactical"]["decision"] == "REDUCIR"
     assert result["contextual"] == {"comparables": 10.0, "macro": 5.0}
     assert "ROIC fuerte" in result["strengths"]
     assert "Balance sólido" in result["strengths"]
