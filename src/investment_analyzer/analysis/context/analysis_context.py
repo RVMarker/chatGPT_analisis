@@ -4,10 +4,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from investment_analyzer.common.models import FinancialStatements, PriceData
+
 
 @dataclass(slots=True)
 class AnalysisContext:
     asset: Any
+    price: PriceData | None = None
+    financials: FinancialStatements | None = None
     technical: dict = field(default_factory=dict)
     technical_result: dict = field(default_factory=dict)
     fundamentals: dict = field(default_factory=dict)
