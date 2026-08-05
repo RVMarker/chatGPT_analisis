@@ -31,7 +31,6 @@ def test_all_strong_is_buy_on_both_horizons():
     assert result.strategic_decision == "COMPRAR"
     assert result.tactical_decision == "COMPRAR"
     assert result.confidence == 100
-    # Context cannot change the verdict.
     assert result.contextual == {"comparables": 20.0, "macro": 20.0}
 
 
@@ -58,8 +57,8 @@ def test_neutral_inputs_are_hold():
     )
     assert result.strategic_score == 50
     assert result.tactical_score == 50
-    assert result.strategic_decision == "REDUCIR"
-    assert result.tactical_decision == "REDUCIR"
+    assert result.strategic_decision == "MANTENER"
+    assert result.tactical_decision == "MANTENER"
 
 
 def test_breakdown_is_numeric_and_transparent():
