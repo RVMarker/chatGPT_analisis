@@ -10,13 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from investment_analyzer.common.models import (
-    BalanceSheet,
-    CashFlow,
-    FinancialStatements,
-    IncomeStatement,
-    PriceData,
-)
+from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
 
 
 class YahooFinanceAdapter:
@@ -27,18 +21,15 @@ class YahooFinanceAdapter:
             try:
                 import yfinance as yf  # type: ignore
             except ImportError as exc:
-                raise RuntimeError(
-                    "yfinance no está instalado. Instala la dependencia para usar Yahoo."
-                ) from exc
+                raise RuntimeError("yfinance no está instalado. Instala la dependencia para usar Yahoo.") from exc
             yf_module = yf
         self.yf = yf_module
 
     def _ticker(self, symbol: str):
-        # El símbolo recibido aquí es SIEMPRE el canónico de Yahoo.
         return self.yf.Ticker(symbol.upper())
 
     @staticmethod
-    def _value(mapping: Any, *keys: str):
+    def _value(mapping: Any, *keys: str, default=None):
         for key in keys:
             try:
                 value = mapping.get(key)
@@ -46,7 +37,7 @@ class YahooFinanceAdapter:
                 value = None
             if value is not None:
                 return value
-        return None
+        return default
 
     @classmethod
     def _latest_statement_value(cls, frame: Any, *keys: str):
@@ -71,26 +62,23 @@ class YahooFinanceAdapter:
         ticker = self._ticker(symbol)
         info = getattr(ticker, "fast_info", {}) or {}
         current = self._value(info, "last_price", "lastPrice")
+        previous = self._value(info, "previous_close", "previousClose")
         if current is None:
             history = ticker.history(period="5d", auto_adjust=False)
             if history.empty:
                 raise ValueError(f"Yahoo no devolvió precios para {symbol}")
-            current = float(history["Close"].dropna().iloc[-1])
-            previous = float(history["Close"].dropna().iloc[-2]) if len(history) > 1 else None
-        else:
-            previous = self._value(info, "previous_close", "previousClose")
+            closes = history["Close"].dropna()
+            current = float(closes.iloc[-1])
+            previous = float(closes.iloc[-2]) if len(closes) > 1 else None
         return PriceData(
-            symbol=symbol.upper(),
-            current=float(current),
+            symbol=symbol.upper(), current=float(current),
             previous_close=None if previous is None else float(previous),
-            open=self._value(info, "open"),
-            high=self._value(info, "day_high", "dayHigh"),
+            open=self._value(info, "open"), high=self._value(info, "day_high", "dayHigh"),
             low=self._value(info, "day_low", "dayLow"),
             volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
             market_cap=self._value(info, "market_cap", "marketCap"),
             shares_outstanding=self._value(info, "shares"),
-            beta=None,
-            currency=self._value(info, "currency", default="USD") or "USD",
+            beta=None, currency=self._value(info, "currency", default="USD") or "USD",
             timestamp=datetime.now(timezone.utc),
         )
 
@@ -99,7 +87,6 @@ class YahooFinanceAdapter:
         balance = getattr(ticker, "balance_sheet", None)
         income = getattr(ticker, "income_stmt", None)
         cashflow = getattr(ticker, "cashflow", None)
-
         bs = BalanceSheet(
             total_assets=self._latest_statement_value(balance, "Total Assets"),
             current_assets=self._latest_statement_value(balance, "Current Assets"),
@@ -114,7 +101,6 @@ class YahooFinanceAdapter:
         )
         if bs.current_assets is not None and bs.current_liabilities is not None:
             bs.working_capital = bs.current_assets - bs.current_liabilities
-
         inc = IncomeStatement(
             revenue=self._latest_statement_value(income, "Total Revenue", "Operating Revenue"),
             gross_profit=self._latest_statement_value(income, "Gross Profit"),
@@ -135,7 +121,6 @@ class YahooFinanceAdapter:
         )
         if cf.free_cash_flow is None and cf.operating_cash_flow is not None and cf.capex is not None:
             cf.free_cash_flow = cf.operating_cash_flow + cf.capex
-
         dates = getattr(balance, "columns", [])
         fiscal_date = str(dates[0]) if len(dates) else None
         return FinancialStatements(balance=bs, income=inc, cashflow=cf, fiscal_date=fiscal_date)
