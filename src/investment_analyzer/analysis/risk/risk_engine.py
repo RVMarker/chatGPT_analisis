@@ -1,22 +1,22 @@
 """V11 risk aggregation layer.
 
 Combines solvency and balance-sheet diagnostics into a normalized 0-100 risk
-score. Higher score means better risk quality. Raw diagnostics remain visible
-for auditability.
+quality score. Higher score means better risk quality. Raw diagnostics remain
+visible for auditability.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Any
 
-from .altman import AltmanZScore
+from .altman import AltmanCalculator
 
 
 @dataclass(slots=True)
 class RiskResult:
     score: float
     altman_score: float | None
-    altman_zone: str
+    altman_classification: str
     debt_to_equity: float | None
     current_ratio: float | None
     interest_coverage: float | None
@@ -56,7 +56,6 @@ class RiskEngine:
         current_ratio = self._ratio(bs.current_assets, bs.current_liabilities)
         interest_coverage = self._ratio(inc.ebit, abs(inc.interest_expense))
 
-        # Score is deliberately conservative when inputs are missing.
         balance_score = 50.0
         if debt_equity is not None:
             balance_score = self._bounded(100 - debt_equity * 40)
@@ -82,20 +81,32 @@ class RiskEngine:
                 strengths.append("Cobertura de intereses fuerte")
 
         altman_score = None
-        altman_zone = "NO DISPONIBLE"
+        altman_classification = "Datos insuficientes"
         try:
             if market_value_equity is not None:
-                altman = AltmanZScore().calculate(statements, market_value_equity)
-                altman_score = altman.score
-                altman_zone = altman.zone
-                if altman_zone == "DISTRESS":
-                    red_flags.append("Altman Z en zona de distress")
-                elif altman_zone == "SAFE":
-                    strengths.append("Altman Z en zona segura")
+                working_capital = bs.working_capital
+                if working_capital is None and bs.current_assets is not None and bs.current_liabilities is not None:
+                    working_capital = bs.current_assets - bs.current_liabilities
+                altman = AltmanCalculator.calculate(
+                    working_capital,
+                    bs.retained_earnings,
+                    inc.ebit,
+                    market_value_equity,
+                    bs.total_liabilities,
+                    inc.revenue,
+                    bs.total_assets,
+                )
+                if altman.complete:
+                    altman_score = altman.score
+                altman_classification = altman.classification
+                if altman.classification == "Alto Riesgo":
+                    red_flags.append("Altman Z en zona de alto riesgo")
+                elif altman.classification == "Excelente":
+                    strengths.append("Altman Z en zona financiera fuerte")
         except (ValueError, TypeError, AttributeError):
             pass
 
-        altman_component = 50.0 if altman_score is None else self._bounded(altman_score * 20)
+        altman_component = 50.0 if altman_score is None else self._bounded(altman_score)
         score = (
             balance_score * 0.30
             + liquidity_score * 0.20
@@ -106,15 +117,11 @@ class RiskEngine:
         return RiskResult(
             score=round(score, 2),
             altman_score=altman_score,
-            altman_zone=altman_zone,
+            altman_classification=altman_classification,
             debt_to_equity=debt_equity,
             current_ratio=current_ratio,
             interest_coverage=interest_coverage,
             red_flags=red_flags,
             strengths=strengths,
-            metrics={
-                "debt_to_equity": debt_equity,
-                "current_ratio": current_ratio,
-                "interest_coverage": interest_coverage,
-            },
+            metrics={"debt_to_equity": debt_equity, "current_ratio": current_ratio, "interest_coverage": interest_coverage},
         )
