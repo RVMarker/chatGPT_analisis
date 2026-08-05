@@ -3,43 +3,33 @@ requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-
 name = "investment-analyzer-v11"
-
 version = "11.0.0"
-
 description = "Professional Investment Analysis Platform"
-
 readme = "README.md"
-
 requires-python = ">=3.12"
-
 license = {text="MIT"}
-
-authors = [
-    {name="Nuria Ledezma"}
-]
-
+authors = [{name="Nuria Ledezma"}]
 dependencies = []
 
+[project.optional-dependencies]
+yahoo = ["yfinance>=0.2.54"]
+full = [
+    "yfinance>=0.2.54",
+    "pandas>=2.2",
+    "numpy>=2.0",
+]
+
+test = ["pytest>=8.0"]
+
 [tool.pytest.ini_options]
-
-pythonpath = [
-    "src"
-]
-
-testpaths = [
-    "tests"
-]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.ruff]
-
 line-length = 100
-
 target-version="py312"
 
 [tool.black]
-
 line-length = 100
-
 target-version=["py312"]
