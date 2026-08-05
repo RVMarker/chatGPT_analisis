@@ -1,13 +1,14 @@
 """High-level adapter for the V11 decision engine.
 
-Keeps the decision calculation independent from report-generation code.
+Keeps decision calculation independent from report-generation code and accepts
+both dictionaries and V11 dataclass results produced by analysis engines.
 """
-
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from typing import Any, Mapping
 
-from .decision_engine import DecisionEngine, DecisionResult
+from .decision_engine import DecisionEngine
 
 
 class DecisionAnalyzer:
@@ -34,11 +35,11 @@ class DecisionAnalyzer:
         red_flags: list[str] | None = None,
         counter_thesis: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Return both horizons plus explicit evidence and counter-thesis."""
         result = self.engine.evaluate(
             strategic_scores={
                 "fundamental": fundamental_score,
                 "valuation": dcf_score,
+                # Contextual only: intentionally ignored by DecisionEngine.
                 "comparables": comparables_score,
                 "macro": macro_score,
                 "risk": risk_score,
@@ -47,6 +48,7 @@ class DecisionAnalyzer:
                 "technical": technical_score,
                 "sentiment": sentiment_score,
                 "smart_money": smart_money_score,
+                # Contextual only: intentionally ignored by DecisionEngine.
                 "macro": macro_score,
             },
             confidence_inputs={
@@ -57,23 +59,35 @@ class DecisionAnalyzer:
             },
             strengths=strengths or [],
             red_flags=red_flags or [],
+            contextual={
+                "comparables": comparables_score,
+                "macro": macro_score,
+            },
         )
 
         return {
             "result": result,
-            "strategic": result,
-            "tactical": result,
+            "strategic": {
+                "decision": result.strategic_decision,
+                "score": result.strategic_score,
+                "breakdown": result.strategic_breakdown,
+            },
+            "tactical": {
+                "decision": result.tactical_decision,
+                "score": result.tactical_score,
+                "breakdown": result.tactical_breakdown,
+            },
+            "confidence": result.confidence,
+            "contextual": result.contextual,
             "counter_thesis": counter_thesis or [],
+            "strengths": result.strengths,
+            "red_flags": result.red_flags,
         }
 
     def build_from_context(self, context: Any) -> dict[str, Any]:
-        """Build a decision from an AnalysisContext.
-
-        Missing optional fields are treated conservatively as neutral (50),
-        while required module outputs remain explicit and easy to diagnose.
-        """
         fundamentals = _mapping(context.fundamentals)
         valuation = _mapping(context.valuation)
+        dcf = _mapping(context.dcf)
         comparables = _mapping(context.comparables)
         macro = _mapping(context.macro)
         risk = _mapping(context.risk)
@@ -81,9 +95,11 @@ class DecisionAnalyzer:
         sentiment = _mapping(context.sentiment)
         asset = context.asset
 
+        # Prefer the explicit DCF result if valuation and DCF are both present.
+        valuation_source = dcf if _has_score(dcf) else valuation
         return self.build(
             fundamental_score=_score(fundamentals),
-            dcf_score=_score(valuation),
+            dcf_score=_score(valuation_source),
             comparables_score=_score(comparables),
             macro_score=_score(macro),
             risk_score=_score(risk),
@@ -94,14 +110,22 @@ class DecisionAnalyzer:
             freshness=_value(asset, "data_freshness", 80.0),
             consistency=_value(asset, "provider_consistency", 80.0),
             completeness=_value(asset, "completeness", 80.0),
-            strengths=_list(risk, "strengths"),
-            red_flags=_list(risk, "red_flags"),
+            strengths=_merge_lists(fundamentals, risk, "strengths"),
+            red_flags=_merge_lists(fundamentals, risk, "red_flags"),
             counter_thesis=_list(risk, "counter_thesis"),
         )
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
+    if isinstance(value, Mapping):
+        return value
+    if is_dataclass(value):
+        return asdict(value)
+    return {}
+
+
+def _has_score(value: Mapping[str, Any]) -> bool:
+    return any(key in value and value[key] is not None for key in ("score", "normalized_score", "total_score"))
 
 
 def _score(value: Mapping[str, Any]) -> float:
@@ -127,6 +151,13 @@ def _number(value: Any, default: float) -> float:
 
 def _list(value: Mapping[str, Any], key: str) -> list[str]:
     data = value.get(key, [])
-    if isinstance(data, list):
-        return [str(item) for item in data]
-    return []
+    return [str(item) for item in data] if isinstance(data, list) else []
+
+
+def _merge_lists(*values: Mapping[str, Any], key: str) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        for item in _list(value, key):
+            if item not in result:
+                result.append(item)
+    return result
