@@ -1,161 +1,55 @@
-"""
-symbol_resolver.py
+"""Resolve the user's Yahoo-style ticker to provider-specific symbols.
 
-Investment Analyzer v11
-
-Responsabilidades
-
-- Resolver cualquier identificador recibido por el usuario.
-- Buscar en SecurityMaster.
-- Si no existe, inferir proveedor.
-- Normalizar el ticker.
-- Registrar automáticamente el activo.
+The user-facing symbol remains exactly the Yahoo Finance symbol. Provider
+mappings are stored in SecurityMaster, so FMP/Alpha Vantage/etc. never need
+to share Yahoo's nomenclature.
 """
 
 from __future__ import annotations
 
 import re
 
-from security_master import (
-    Security,
-    SecurityMaster,
-)
+from .security_master import Security, SecurityMaster
 
 
 class SymbolResolver:
-
-    def __init__(
-
-        self,
-
-        security_master: SecurityMaster,
-
-    ):
-
+    def __init__(self, security_master: SecurityMaster) -> None:
         self.security_master = security_master
 
-    # ---------------------------------------------------------
+    @staticmethod
+    def normalize(symbol: str) -> str:
+        return symbol.strip().upper().replace(" ", "")
 
-    def normalize(
+    @staticmethod
+    def is_isin(text: str) -> bool:
+        return bool(re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}[0-9]", text.upper()))
 
-        self,
+    def resolve(self, text: str) -> Security | None:
+        return self.security_master.get(self.normalize(text))
 
-        symbol: str,
-
-    ) -> str:
-
-        symbol = symbol.strip()
-
-        symbol = symbol.upper()
-
-        symbol = symbol.replace(" ", "")
-
-        return symbol
-
-    # ---------------------------------------------------------
-
-    def is_isin(
-
-        self,
-
-        text: str,
-
-    ) -> bool:
-
-        return bool(
-
-            re.match(
-
-                r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$",
-
-                text,
-
-            )
-
-        )
-
-    # ---------------------------------------------------------
-
-    def resolve(
-
-        self,
-
-        text: str,
-
-    ) -> Security | None:
-
-        text = self.normalize(text)
-
-        security = self.security_master.get(text)
-
-        if security is not None:
-
-            return security
-
-        return None
-
-    # ---------------------------------------------------------
-
-    def provider_symbol(
-
-        self,
-
-        text: str,
-
-        provider: str,
-
-    ) -> str:
-
+    def provider_symbol(self, text: str, provider: str) -> str:
         security = self.resolve(text)
-
         if security is None:
-
             return self.normalize(text)
-
         return self.security_master.provider_symbol(
-
             security.canonical_symbol,
-
             provider,
-
         )
 
-    # ---------------------------------------------------------
-
-    def ensure(
-
-        self,
-
-        symbol: str,
-
-    ) -> Security:
-
-        security = self.resolve(symbol)
-
-        if security:
-
-            return security
-
+    def ensure(self, symbol: str) -> Security:
         normalized = self.normalize(symbol)
+        security = self.resolve(normalized)
+        if security is not None:
+            return security
 
         security = Security(
-
             asset_id=f"TMP-{normalized}",
-
             canonical_symbol=normalized,
-
             name=normalized,
-
             exchange="UNKNOWN",
-
             currency="UNKNOWN",
-
             asset_type="UNKNOWN",
-
             yahoo=normalized,
-
         )
-
         self.security_master.add(security)
-
         return security
