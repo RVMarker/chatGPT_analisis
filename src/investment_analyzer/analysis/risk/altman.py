@@ -1,140 +1,98 @@
-"""
-Altman Z-Score
+"""Altman Z-Score using fields already present in the V11 models.
 
-Compatible con yfinance.
-
-Utiliza únicamente información que ya descarga la V10.
+The classic Z-Score formula is intended primarily for public manufacturing
+companies. The engine therefore labels the result as an Altman-style signal,
+not as a universal bankruptcy probability. Missing inputs are handled as
+insufficient data rather than silently converted to zero.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(slots=True)
 class AltmanResult:
-
-    zscore: float
-
+    zscore: float | None
     classification: str
-
     score: float
-
     explanation: str
+    complete: bool = True
+
+
+def _number(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if isfinite(number) else None
 
 
 class AltmanCalculator:
+    """Calculate the classic public-company Altman Z-Score."""
 
     @staticmethod
     def calculate(
-
-        working_capital,
-
-        retained_earnings,
-
-        ebit,
-
-        market_value_equity,
-
-        total_liabilities,
-
-        sales,
-
-        total_assets,
-
+        working_capital: object,
+        retained_earnings: object,
+        ebit: object,
+        market_value_equity: object,
+        total_liabilities: object,
+        sales: object,
+        total_assets: object,
     ) -> AltmanResult:
-
-        if (
-            total_assets <= 0
-            or total_liabilities <= 0
-        ):
-
+        values = {
+            "working_capital": _number(working_capital),
+            "retained_earnings": _number(retained_earnings),
+            "ebit": _number(ebit),
+            "market_value_equity": _number(market_value_equity),
+            "total_liabilities": _number(total_liabilities),
+            "sales": _number(sales),
+            "total_assets": _number(total_assets),
+        }
+        missing = [name for name, value in values.items() if value is None]
+        if missing or values["total_assets"] <= 0 or values["total_liabilities"] <= 0:
             return AltmanResult(
-
-                0,
-
-                "Datos insuficientes",
-
-                0,
-
-                "No fue posible calcular Altman."
-
+                zscore=None,
+                classification="Datos insuficientes",
+                score=0.0,
+                explanation="Faltan datos válidos para calcular Altman: " + ", ".join(missing),
+                complete=False,
             )
 
-        A = working_capital / total_assets
+        assets = values["total_assets"]
+        liabilities = values["total_liabilities"]
+        A = values["working_capital"] / assets
+        B = values["retained_earnings"] / assets
+        C = values["ebit"] / assets
+        D = values["market_value_equity"] / liabilities
+        E = values["sales"] / assets
+        z = 1.2 * A + 1.4 * B + 3.3 * C + 0.6 * D + E
 
-        B = retained_earnings / total_assets
-
-        C = ebit / total_assets
-
-        D = market_value_equity / total_liabilities
-
-        E = sales / total_assets
-
-        z = (
-
-            1.2 * A +
-
-            1.4 * B +
-
-            3.3 * C +
-
-            0.6 * D +
-
-            1.0 * E
-
-        )
-
-        if z >= 3:
-
-            return AltmanResult(
-
-                z,
-
+        if z >= 3.0:
+            classification, score, explanation = (
                 "Excelente",
-
-                100,
-
-                "Muy baja probabilidad de problemas financieros."
-
+                100.0,
+                "Z-Score por encima de 3.0; señal financiera fuerte.",
             )
-
-        if z >= 2.6:
-
-            return AltmanResult(
-
-                z,
-
+        elif z >= 2.6:
+            classification, score, explanation = (
                 "Buena",
-
-                85,
-
-                "Empresa financieramente saludable."
-
+                85.0,
+                "Z-Score favorable, aunque requiere seguimiento.",
             )
-
-        if z >= 1.8:
-
-            return AltmanResult(
-
-                z,
-
+        elif z >= 1.8:
+            classification, score, explanation = (
                 "Zona Gris",
-
-                60,
-
-                "Conviene vigilar el balance."
-
+                60.0,
+                "Zona intermedia; conviene revisar liquidez, deuda y cobertura.",
+            )
+        else:
+            classification, score, explanation = (
+                "Alto Riesgo",
+                20.0,
+                "Z-Score bajo; existe señal de estrés financiero significativo.",
             )
 
-        return AltmanResult(
-
-            z,
-
-            "Alto Riesgo",
-
-            20,
-
-            "Existe riesgo financiero significativo."
-
-        )
+        return AltmanResult(z, classification, score, explanation, True)
