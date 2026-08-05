@@ -45,8 +45,8 @@ class DecisionEngine:
 
     BUY = 80.0
     ACCUMULATE = 70.0
-    HOLD = 55.0
-    REDUCE = 40.0
+    HOLD = 50.0
+    REDUCE = 35.0
 
     def __init__(self) -> None:
         validate_weights()
