@@ -38,3 +38,23 @@ def test_missing_tactical_components_are_excluded_from_weighted_average():
     assert any(x.name == "sentiment" and not x.available for x in breakdown)
     assert any(x.name == "smart_money" and not x.available for x in breakdown)
     assert all(x.weight == 1.0 for x in breakdown if x.available)
+    assert warnings == []
+
+
+def test_no_evidence_returns_nd_instead_of_hold():
+    result = DecisionEngine().evaluate(
+        strategic_scores={"fundamental": None, "valuation": None, "risk": None},
+        tactical_scores={"technical": None, "sentiment": None, "smart_money": None},
+        confidence_inputs={
+            "provider_quality": 0,
+            "freshness": 0,
+            "consistency": 0,
+            "completeness": 0,
+            "technical_data_quality": 0,
+        },
+    )
+    assert result.strategic_score is None
+    assert result.tactical_score is None
+    assert result.strategic_decision == "N/D"
+    assert result.tactical_decision == "N/D"
+    assert "Ningún componente disponible; veredicto N/D" in result.red_flags
