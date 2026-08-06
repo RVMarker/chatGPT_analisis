@@ -28,16 +28,37 @@ class DecisionModule:
 
     @staticmethod
     def _technical_quality(context):
-        result = getattr(context, "technical_result", None)
+        result = getattr(context, "technical_result", {}) or {}
         if not isinstance(result, dict):
             return 50.0
         if not result.get("available", False):
             return 40.0
-        requirements = result.get("requirements", {})
+        requirements = result.get("requirements", {}) or {}
         if not requirements:
             return 60.0
         available = sum(bool(v) for v in requirements.values())
         return round(50.0 + 50.0 * available / len(requirements), 2)
+
+    @staticmethod
+    def _collect_strengths(context):
+        strengths = []
+        technical = getattr(context, "technical", {}) or {}
+        if isinstance(technical, dict):
+            score = DecisionModule._score(technical)
+            if score >= 70:
+                strengths.append(f"Technical score favorable ({score:.1f}/100)")
+        fundamentals = getattr(context, "fundamentals", {}) or {}
+        if isinstance(fundamentals, dict) and DecisionModule._score(fundamentals) >= 70:
+            strengths.append("Fundamental score favorable")
+        return strengths
+
+    @staticmethod
+    def _collect_red_flags(context):
+        flags = []
+        technical = getattr(context, "technical", {}) or {}
+        if isinstance(technical, dict):
+            flags.extend(str(x) for x in technical.get("warnings", []) or [])
+        return flags
 
     def run(self, context):
         fundamental = self._score(context.fundamentals)
@@ -50,8 +71,6 @@ class DecisionModule:
         provider_data = context.metadata.get("data_providers", {})
         required = [provider_data.get("price"), provider_data.get("financials")]
         completeness = 100.0 if all(required) else 50.0
-        if provider_data.get("history"):
-            completeness = min(100.0, completeness + 0.0)
         provider_quality = 90.0 if all(p == "yahoo" for p in required if p) else 80.0
         technical_quality = self._technical_quality(context)
         freshness = 80.0 if provider_data.get("history") else 60.0
@@ -74,6 +93,8 @@ class DecisionModule:
                 "completeness": completeness,
                 "technical_data_quality": technical_quality,
             },
+            strengths=self._collect_strengths(context),
+            red_flags=self._collect_red_flags(context),
             contextual={
                 "comparables": self._score(context.comparables),
                 "macro": self._score(context.macro),
