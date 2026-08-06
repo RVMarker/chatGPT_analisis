@@ -21,5 +21,6 @@ def test_technical_module_does_not_fabricate_history_indicators():
         technical_result={},
     )
     result = TechnicalModule().run(context)
-    assert result["score"] == 50.0
+    assert result["score"] is None
     assert result["available"] is False
+    assert result["data_quality"] == "unavailable"
