@@ -37,13 +37,13 @@ class DecisionModule:
             available = bool(result.get("available", False))
             requirements = result.get("requirements", {}) or {}
         else:
-            return 40.0
+            return 0.0
         if not available:
-            return 40.0
+            return 0.0
         if not requirements:
-            return 60.0
+            return 50.0
         satisfied = sum(bool(v) for v in requirements.values())
-        return round(50.0 + 50.0 * satisfied / len(requirements), 2)
+        return round(100.0 * satisfied / len(requirements), 2)
 
     @staticmethod
     def _collect_strengths(context):
@@ -75,11 +75,16 @@ class DecisionModule:
         smart_money = self._score(context.metadata.get("smart_money"))
 
         provider_data = context.metadata.get("data_providers", {})
-        required = [provider_data.get("price"), provider_data.get("financials")]
-        completeness = 100.0 if all(required) else 50.0
-        provider_quality = 90.0 if all(p == "yahoo" for p in required if p) else 80.0
+        provider_values = [provider_data.get("price"), provider_data.get("financials")]
+        required_present = sum(bool(value) for value in provider_values)
+        completeness = round(100.0 * required_present / len(provider_values), 2) if provider_values else 0.0
+        present_providers = [value for value in provider_values if value]
+        provider_quality = (
+            round(100.0 * sum(value == "yahoo" for value in present_providers) / len(present_providers), 2)
+            if present_providers else 0.0
+        )
         technical_quality = self._technical_quality(context)
-        freshness = 80.0 if provider_data.get("history") else 60.0
+        freshness = 100.0 if provider_data.get("history") else 0.0
 
         result = self.engine.evaluate(
             strategic_scores={"fundamental": fundamental, "valuation": valuation, "risk": risk},
