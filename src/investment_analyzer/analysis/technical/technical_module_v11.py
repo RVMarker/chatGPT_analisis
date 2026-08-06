@@ -1,7 +1,8 @@
 """Historical Technical Analysis V11.
 
 Consumes PriceHistory and produces a transparent technical score. It does not
-invent indicators when history is insufficient.
+invent indicators when history is insufficient. Missing indicator components
+are excluded from the aggregate and the remaining weights are renormalized.
 """
 from __future__ import annotations
 
@@ -26,10 +27,10 @@ class TechnicalAnalysisV11:
         if len(history) < self.min_history:
             return AnalysisResult(
                 module="technical",
-                score=50.0,
+                score=None,
                 explanation="Histórico insuficiente para el análisis técnico V11.",
                 warnings=[f"Se requieren al menos {self.min_history} observaciones; disponibles: {len(history)}."],
-                metadata={"available": False, "history_length": len(history), "indicators": {}, "requirements": {}},
+                metadata={"available": False, "history_length": len(history), "indicators": {}, "requirements": {}, "component_scores": {}, "available_components": [], "unavailable_components": list(self.weights)},
             )
 
         ind = calculate_indicators(history)
@@ -43,21 +44,21 @@ class TechnicalAnalysisV11:
             scores["trend"] = 100.0 if last > ema20 > sma20 else 65.0 if last > ema20 else 35.0
             available["trend"] = True
         else:
-            scores["trend"] = 50.0; available["trend"] = False
+            available["trend"] = False
 
         rsi = ind["rsi14"]
         if rsi is not None:
             scores["momentum"] = 70.0 if 50 <= rsi <= 70 else 55.0 if rsi >= 40 else 30.0
             available["momentum"] = True
         else:
-            scores["momentum"] = 50.0; available["momentum"] = False
+            available["momentum"] = False
 
         macd_data = ind["macd"]
         if macd_data is not None:
             scores["macd"] = 75.0 if macd_data["macd"] > macd_data["signal"] else 30.0
             available["macd"] = True
         else:
-            scores["macd"] = 50.0; available["macd"] = False
+            available["macd"] = False
 
         bb = ind["bollinger20"]
         if bb is not None:
@@ -65,15 +66,19 @@ class TechnicalAnalysisV11:
             scores["volatility"] = 70.0 if 0.40 <= position <= 0.80 else 55.0 if position > 0.20 else 35.0
             available["volatility"] = True
         else:
-            scores["volatility"] = 50.0; available["volatility"] = False
+            available["volatility"] = False
 
         if sma50 is not None and sma200 is not None:
             scores["long_term"] = 80.0 if last > sma50 > sma200 else 65.0 if last > sma200 else 30.0
             available["long_term"] = True
         else:
-            scores["long_term"] = 50.0; available["long_term"] = False
+            available["long_term"] = False
 
-        score = sum(scores[k] * self.weights[k] for k in self.weights)
+        available_weight = sum(self.weights[k] for k in self.weights if available.get(k) and k in scores)
+        score = None
+        if available_weight > 0:
+            score = round(sum(scores[k] * self.weights[k] for k in self.weights if available.get(k) and k in scores) / available_weight, 2)
+
         warnings = [f"Indicador no disponible: {k}" for k, ok in available.items() if not ok]
         technical = TechnicalIndicators(
             rsi=rsi,
@@ -87,8 +92,17 @@ class TechnicalAnalysisV11:
             bollinger_position=((last - bb["lower"]) / (bb["upper"] - bb["lower"]) if bb and bb["upper"] != bb["lower"] else None),
         )
         return AnalysisResult(
-            module="technical", score=round(score, 2),
-            explanation="Score técnico V11 calculado sobre histórico OHLCV.",
+            module="technical", score=score,
+            explanation="Score técnico V11 calculado sobre histórico OHLCV; componentes ausentes excluidos y pesos renormalizados.",
             warnings=warnings,
-            metadata={"available": True, "history_length": len(history), "indicators": technical, "requirements": req, "component_scores": scores},
+            metadata={
+                "available": score is not None,
+                "history_length": len(history),
+                "indicators": technical,
+                "requirements": req,
+                "component_scores": scores,
+                "available_components": [k for k, ok in available.items() if ok],
+                "unavailable_components": [k for k, ok in available.items() if not ok],
+                "effective_weight": available_weight,
+            },
         )
