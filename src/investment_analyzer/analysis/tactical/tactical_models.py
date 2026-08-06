@@ -1,7 +1,7 @@
 """Normalized models for tactical evidence used by V11."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -28,6 +28,6 @@ class TacticalSignal:
             "score": self.score,
             "available": self.available,
             "confidence": self.confidence,
-            "evidence": [e.__dict__ for e in self.evidence],
+            "evidence": [asdict(e) for e in self.evidence],
             "warnings": list(self.warnings),
         }
