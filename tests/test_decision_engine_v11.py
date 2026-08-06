@@ -13,25 +13,27 @@ def _confidence(value=100):
     }
 
 
+def _evaluate(score):
+    engine = DecisionEngine()
+    return engine.evaluate(
+        strategic_scores={"fundamental": score, "valuation": score, "risk": score},
+        tactical_scores={"technical": score, "sentiment": score, "smart_money": score},
+        confidence_inputs=_confidence(),
+    )
+
+
 def test_weights_sum_to_one():
     assert sum(STRATEGIC.values()) == 1.0
     assert sum(TACTICAL.values()) == 1.0
 
 
 def test_all_strong_is_buy_on_both_horizons():
-    engine = DecisionEngine()
-    result = engine.evaluate(
-        strategic_scores={"fundamental": 100, "valuation": 100, "risk": 100},
-        tactical_scores={"technical": 100, "sentiment": 100, "smart_money": 100},
-        confidence_inputs=_confidence(),
-        contextual={"comparables": 20, "macro": 20},
-    )
+    result = _evaluate(100)
     assert result.strategic_score == 100
     assert result.tactical_score == 100
     assert result.strategic_decision == "COMPRAR"
     assert result.tactical_decision == "COMPRAR"
     assert result.confidence == 100
-    assert result.contextual == {"comparables": 20.0, "macro": 20.0}
 
 
 def test_macro_and_comparables_do_not_vote():
@@ -49,12 +51,7 @@ def test_macro_and_comparables_do_not_vote():
 
 
 def test_neutral_inputs_are_hold():
-    engine = DecisionEngine()
-    result = engine.evaluate(
-        strategic_scores={"fundamental": 50, "valuation": 50, "risk": 50},
-        tactical_scores={"technical": 50, "sentiment": 50, "smart_money": 50},
-        confidence_inputs=_confidence(80),
-    )
+    result = _evaluate(50)
     assert result.strategic_score == 50
     assert result.tactical_score == 50
     assert result.strategic_decision == "MANTENER"
@@ -72,3 +69,54 @@ def test_breakdown_is_numeric_and_transparent():
     assert sum(x.weight for x in result.tactical_breakdown) == 1.0
     assert result.strategic_score == 70
     assert result.tactical_score == 72
+
+
+def test_exact_decision_thresholds_are_stable():
+    cases = [
+        (100.0, "COMPRAR"),
+        (80.0, "COMPRAR"),
+        (79.99, "ACUMULAR"),
+        (70.0, "ACUMULAR"),
+        (69.99, "MANTENER"),
+        (50.0, "MANTENER"),
+        (49.99, "REDUCIR"),
+        (35.0, "REDUCIR"),
+        (34.99, "VENDER"),
+        (0.0, "VENDER"),
+    ]
+    for score, expected in cases:
+        result = _evaluate(score)
+        assert result.strategic_score == score
+        assert result.tactical_score == score
+        assert result.strategic_decision == expected
+        assert result.tactical_decision == expected
+
+
+def test_missing_components_are_excluded_and_weights_renormalized():
+    engine = DecisionEngine()
+    result = engine.evaluate(
+        strategic_scores={"fundamental": 100, "valuation": None, "risk": 0},
+        tactical_scores={"technical": 100, "sentiment": None, "smart_money": 0},
+        confidence_inputs=_confidence(),
+    )
+    assert result.strategic_score == 50
+    assert result.tactical_score == 50
+    assert result.strategic_decision == "MANTENER"
+    assert result.tactical_decision == "MANTENER"
+    assert result.strategic_breakdown[0].weight == 2 / 3
+    assert result.strategic_breakdown[1].available is False
+    assert result.tactical_breakdown[0].weight == 0.75
+    assert result.tactical_breakdown[1].available is False
+
+
+def test_no_available_evidence_returns_no_decision():
+    engine = DecisionEngine()
+    result = engine.evaluate(
+        strategic_scores={"fundamental": None, "valuation": None, "risk": None},
+        tactical_scores={"technical": None, "sentiment": None, "smart_money": None},
+        confidence_inputs=_confidence(),
+    )
+    assert result.strategic_score is None
+    assert result.tactical_score is None
+    assert result.strategic_decision == "N/D"
+    assert result.tactical_decision == "N/D"
