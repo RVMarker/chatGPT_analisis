@@ -23,7 +23,7 @@ class FinancialSnapshot:
 
 
 class FinancialDataLoader:
-    """Load normalized data independently, allowing price/financials/history fallback."""
+    """Load normalized data independently, allowing each dataset to fallback."""
 
     def __init__(self, provider_manager: ProviderManager | None = None, adapter=None):
         self.provider_manager = provider_manager
@@ -33,7 +33,7 @@ class FinancialDataLoader:
         return self.adapter.price(symbol), self.adapter.financial_statements(symbol)
 
     def _load_yahoo_history(self, symbol: str):
-        return self.adapter.price_history(symbol)
+        return self.adapter.price_history(symbol, period="2y", interval="1d")
 
     def load(self, symbol: str) -> FinancialSnapshot:
         canonical = str(symbol).strip().upper()
@@ -43,11 +43,11 @@ class FinancialDataLoader:
         if self.provider_manager is None:
             price, financials = self._load_yahoo(canonical)
             history = self._load_yahoo_history(canonical)
-            return FinancialSnapshot(price, financials, "yahoo", "yahoo", canonical, canonical,
-                                     history, "yahoo", canonical)
+            return FinancialSnapshot(price, financials, "yahoo", "yahoo", canonical, canonical, history, "yahoo", canonical)
 
         price_response = self.provider_manager.execute_with_fallback(canonical, "get_price")
         financial_response = self.provider_manager.execute_with_fallback(canonical, "get_financial_statements")
+        history_response = self.provider_manager.execute_with_fallback(canonical, "get_price_history")
         if not price_response.success:
             raise RuntimeError(f"No fue posible obtener precio para {canonical}: {price_response.error}")
         if not financial_response.success:
@@ -55,15 +55,13 @@ class FinancialDataLoader:
 
         price = _ensure_type(price_response.data, PriceData, "precio")
         financials = _ensure_type(financial_response.data, FinancialStatements, "estados financieros")
-
-        history_response = self.provider_manager.execute_with_fallback(canonical, "get_price_history")
         history = None
         history_provider = None
-        history_symbol = None
+        history_provider_symbol = None
         if history_response.success:
-            history = _ensure_type(history_response.data, PriceHistory, "histórico OHLCV")
+            history = _ensure_type(history_response.data, PriceHistory, "histórico")
             history_provider = history_response.provider
-            history_symbol = history_response.provider_symbol or canonical
+            history_provider_symbol = history_response.provider_symbol or canonical
 
         return FinancialSnapshot(
             price=price,
@@ -74,7 +72,7 @@ class FinancialDataLoader:
             financials_provider_symbol=financial_response.provider_symbol or canonical,
             history=history,
             history_provider=history_provider,
-            history_provider_symbol=history_symbol,
+            history_provider_symbol=history_provider_symbol,
         )
 
 
