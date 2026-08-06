@@ -1,4 +1,8 @@
-"""Production composition root for the V11 analyzer."""
+"""Production composition root for the V11 analyzer.
+
+This module assembles the provider/data layers without pretending that
+analysis modules not yet implemented are production-ready.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,22 +16,8 @@ from investment_analyzer.providers.provider_bootstrap import build_provider_stac
 from investment_analyzer.security.asset_loader import AssetLoader
 
 
-@dataclass(slots=True)
-class ModuleBundle:
-    asset: AssetLoader
-    technical: object
-    comparables: object
-    sentiment: object
-    macro: object
-    porter: object
-    elliott: object
-    dow: object
-    backtest: object
-    decision: DecisionModule
-
-
 class UnsupportedModule:
-    """Explicit placeholder for modules not yet wired into production composition."""
+    """Explicit fail-fast placeholder for a module not wired into production."""
 
     def __init__(self, name: str):
         self.name = name
@@ -36,22 +26,29 @@ class UnsupportedModule:
         raise RuntimeError(f"Módulo V11 no conectado todavía: {self.name}")
 
 
-class TechnicalModule(UnsupportedModule):
-    pass
+@dataclass(slots=True)
+class ModuleBundle:
+    technical: object
+    comparables: object
+    sentiment: object
+    macro: object
+    porter: object
+    elliott: object
+    dow: object
+    backtest: object
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
+    """Build the real provider/data stack used by the CLI composition root."""
     registry, manager = build_provider_stack(
         yahoo_provider=yahoo_provider,
         fmp_provider=fmp_provider,
         symbol_mappings=symbol_mappings,
     )
-    asset_loader = AssetLoader()
     data_loader = FinancialDataLoader(provider_manager=manager)
 
     modules = ModuleBundle(
-        asset=asset_loader,
-        technical=TechnicalModule("technical"),
+        technical=UnsupportedModule("technical"),
         comparables=UnsupportedModule("comparables"),
         sentiment=UnsupportedModule("sentiment"),
         macro=UnsupportedModule("macro"),
@@ -59,14 +56,15 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
         elliott=UnsupportedModule("elliott"),
         dow=UnsupportedModule("dow"),
         backtest=UnsupportedModule("backtest"),
-        decision=DecisionModule(),
     )
 
     pipeline = AnalysisPipeline(
-        providers=registry,
+        providers=manager,
         modules=modules,
         financial_adapter=FinancialModuleAdapter(),
-        financial_data_loader=data_loader,
+        financial_loader=data_loader,
+        asset_loader=AssetLoader(),
+        decision_module=DecisionModule(),
     )
     return pipeline, manager, registry
 
