@@ -2,7 +2,7 @@
 
 Combines solvency and balance-sheet diagnostics into a normalized 0-100 risk
 quality score. Higher score means better risk quality. Raw diagnostics remain
-visible for auditability.
+visible for auditability. Missing components do not become a neutral 50.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from .altman import AltmanCalculator
 
 @dataclass(slots=True)
 class RiskResult:
-    score: float
+    score: float | None
     altman_score: float | None
     altman_classification: str
     debt_to_equity: float | None
@@ -23,6 +23,8 @@ class RiskResult:
     red_flags: list[str]
     strengths: list[str]
     metrics: dict[str, Any]
+    available_components: list[str]
+    unavailable_components: list[str]
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -43,7 +45,7 @@ class RiskEngine:
     @staticmethod
     def _bounded(value):
         if value is None:
-            return 50.0
+            return None
         return max(0.0, min(100.0, float(value)))
 
     def calculate(self, statements, market_value_equity: float | None = None) -> RiskResult:
@@ -56,25 +58,21 @@ class RiskEngine:
         current_ratio = self._ratio(bs.current_assets, bs.current_liabilities)
         interest_coverage = self._ratio(inc.ebit, abs(inc.interest_expense))
 
-        balance_score = 50.0
+        balance_score = self._bounded(100 - debt_equity * 40) if debt_equity is not None else None
+        liquidity_score = self._bounded(50 + (current_ratio - 1) * 35) if current_ratio is not None else None
+        coverage_score = self._bounded(interest_coverage * 15) if interest_coverage is not None else None
+
         if debt_equity is not None:
-            balance_score = self._bounded(100 - debt_equity * 40)
             if debt_equity > 2:
                 red_flags.append("Deuda/patrimonio elevada")
             elif debt_equity < 0.75:
                 strengths.append("Apalancamiento moderado")
-
-        liquidity_score = 50.0
         if current_ratio is not None:
-            liquidity_score = self._bounded(50 + (current_ratio - 1) * 35)
             if current_ratio < 1:
                 red_flags.append("Liquidez corriente inferior a 1")
             elif current_ratio >= 1.5:
                 strengths.append("Liquidez corriente saludable")
-
-        coverage_score = 50.0
         if interest_coverage is not None:
-            coverage_score = self._bounded(interest_coverage * 15)
             if interest_coverage < 1:
                 red_flags.append("Cobertura de intereses inferior a 1x")
             elif interest_coverage >= 5:
@@ -106,16 +104,24 @@ class RiskEngine:
         except (ValueError, TypeError, AttributeError):
             pass
 
-        altman_component = 50.0 if altman_score is None else self._bounded(altman_score)
-        score = (
-            balance_score * 0.30
-            + liquidity_score * 0.20
-            + coverage_score * 0.20
-            + altman_component * 0.30
-        )
+        components = {
+            "balance": (balance_score, 0.30),
+            "liquidity": (liquidity_score, 0.20),
+            "coverage": (coverage_score, 0.20),
+            "altman": (self._bounded(altman_score), 0.30),
+        }
+        available = {name: (score, weight) for name, (score, weight) in components.items() if score is not None}
+        unavailable = [name for name, (score, _) in components.items() if score is None]
+        if available:
+            total_weight = sum(weight for _, weight in available.values())
+            score = sum(score_value * (weight / total_weight) for score_value, weight in available.values())
+            score = round(score, 2)
+        else:
+            score = None
+            red_flags.append("Riesgo: ningún componente disponible; score N/D")
 
         return RiskResult(
-            score=round(score, 2),
+            score=score,
             altman_score=altman_score,
             altman_classification=altman_classification,
             debt_to_equity=debt_equity,
@@ -124,4 +130,6 @@ class RiskEngine:
             red_flags=red_flags,
             strengths=strengths,
             metrics={"debt_to_equity": debt_equity, "current_ratio": current_ratio, "interest_coverage": interest_coverage},
+            available_components=list(available),
+            unavailable_components=unavailable,
         )
