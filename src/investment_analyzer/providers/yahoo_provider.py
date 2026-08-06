@@ -14,6 +14,9 @@ class YahooProvider(ProviderBase):
     def get_price(self, symbol: str):
         return self.adapter.price(symbol)
 
+    def get_financial_statements(self, symbol: str):
+        return self.adapter.financial_statements(symbol)
+
     def get_balance_sheet(self, symbol: str):
         return self.adapter.financial_statements(symbol).balance
 
