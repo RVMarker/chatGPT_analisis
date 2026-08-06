@@ -21,6 +21,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
           python -m pip install pytest
+      - name: Run lightweight V11 smoke test
+        env:
+          PYTHONPATH: src
+        run: python scripts/ci_smoke_test.py
       - name: Run V11 regression tests
         env:
           PYTHONPATH: src
