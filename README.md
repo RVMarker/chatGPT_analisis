@@ -31,22 +31,22 @@ En PowerShell, si la política de ejecución bloquea la activación del entorno,
 
 ## Ejecución
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio. El entry point actual es `investment_analyzer.cli` (archivo `src/investment_analyzer/cli.py`):
 
 ```bash
-python -m investment_analyzer.cli.main AAPL
+python -m investment_analyzer.cli AAPL
 ```
 
 Ejemplo para un activo mexicano:
 
 ```bash
-python -m investment_analyzer.cli.main FMTY14.MX
+python -m investment_analyzer.cli FMTY14.MX
 ```
 
 También puede ejecutarse con el Python del entorno virtual:
 
 ```powershell
-.venv\Scripts\python.exe -m investment_analyzer.cli.main FMTY14.MX
+.venv\Scripts\python.exe -m investment_analyzer.cli FMTY14.MX
 ```
 
 ## Validación
@@ -77,6 +77,8 @@ La existencia de un score alto no implica por sí sola alta confianza.
 ## Proveedores y símbolos
 
 El sistema conserva el símbolo introducido por el usuario y el símbolo utilizado por cada proveedor cuando son diferentes. Esto permite auditar casos como tickers mexicanos cuya nomenclatura no coincide entre proveedores.
+
+Actualmente la composición de producción instala **Yahoo** como proveedor por defecto. El adaptador FMP existe, pero requiere que la aplicación le inyecte un cliente FMP compatible; no se debe asumir que una `FMP_API_KEY` por sí sola habilita FMP hasta que exista ese cliente/configuración.
 
 ## Estado
 
