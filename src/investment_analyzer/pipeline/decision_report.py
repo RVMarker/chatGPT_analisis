@@ -32,19 +32,21 @@ def _breakdown_lines(title: str, items: Any) -> list[str]:
         weight = _get(item, "weight", default=None)
         weighted = _get(item, "weighted", "weighted_contribution", default=None)
         contribution = _get(item, "contribution_pct", default=None)
+        weight_pct = weight * 100 if isinstance(weight, (int, float)) else weight
         contribution_text = f" aporte%={_fmt(contribution, 1)}" if contribution is not None else ""
         lines.append(
             f"  {name:15s} score={_fmt(score, 2):>6} "
-            f"peso={_fmt(weight * 100 if isinstance(weight, (int, float)) else weight, 1)}% "
-            f"aporte={_fmt(weighted, 2):>6}{contribution_text}"
+            f"peso={_fmt(weight_pct, 1)}% aporte={_fmt(weighted, 2):>6}{contribution_text}"
         )
     return lines
 
 
 def render_decision_report(context) -> str:
     decision = context.decision
-    strategic = _get(decision, "strategic", "strategic_decision", default={})
-    tactical = _get(decision, "tactical", "tactical_decision", default={})
+    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default="N/D")
+    tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default="N/D")
+    strategic_score = _get(decision, "strategic_score", default=None)
+    tactical_score = _get(decision, "tactical_score", default=None)
     confidence = _get(decision, "confidence", default=None)
     metadata = getattr(context, "metadata", {}) or {}
     providers = metadata.get("data_providers", {})
@@ -61,15 +63,15 @@ def render_decision_report(context) -> str:
         f"Activo: {_get(context.asset, 'symbol', default='N/D')}",
         "",
         "DECISIÓN ESTRATÉGICA (años)",
-        f"  Veredicto : {_get(strategic, 'verdict', 'decision', default='N/D')}",
-        f"  Score     : {_fmt(_get(strategic, 'score', default=None), 2)}/100",
+        f"  Veredicto : {strategic_verdict}",
+        f"  Score     : {_fmt(strategic_score, 2)}/100",
         "",
         "DECISIÓN TÁCTICA (semanas)",
-        f"  Veredicto : {_get(tactical, 'verdict', 'decision', default='N/D')}",
-        f"  Score     : {_fmt(_get(tactical, 'score', default=None), 2)}/100",
+        f"  Veredicto : {tactical_verdict}",
+        f"  Score     : {_fmt(tactical_score, 2)}/100",
         "",
         "CONFIANZA",
-        f"  {_fmt(confidence, 1)}",
+        f"  {_fmt(confidence, 1)}%",
         "",
     ]
     lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown))
@@ -78,10 +80,10 @@ def render_decision_report(context) -> str:
     lines.extend([
         "",
         "DATOS UTILIZADOS",
-        f"  Precio       : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
-        f"  Financieros : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
-        f"  Histórico   : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-        f"  Observaciones: {providers.get('history_length', 'N/D')}",
+        f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
+        f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
+        f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
+        f"  Observaciones : {providers.get('history_length', 'N/D')}",
         "",
         "CONTEXTO — NO VOTA DIRECTAMENTE",
     ])
