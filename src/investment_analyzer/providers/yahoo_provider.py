@@ -15,7 +15,7 @@ class YahooProvider(ProviderBase):
         return self.adapter.price(symbol)
 
     def get_price_history(self, symbol: str):
-        return self.adapter.price_history(symbol)
+        return self.adapter.price_history(symbol, period="2y", interval="1d")
 
     def get_financial_statements(self, symbol: str):
         return self.adapter.financial_statements(symbol)
