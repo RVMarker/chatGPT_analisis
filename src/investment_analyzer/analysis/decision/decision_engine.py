@@ -2,8 +2,7 @@
 
 Strategic horizon: years. Tactical horizon: weeks.
 Comparables and macro are contextual evidence only and never vote in either
-verdict. This prevents double-counting valuation context and makes the score
-explainable.
+verdict. Unavailable evidence is not silently converted to a neutral 50.
 """
 from __future__ import annotations
 
@@ -16,26 +15,28 @@ from .decision_weights import STRATEGIC, TACTICAL, validate_weights
 @dataclass(slots=True)
 class ScoreComponent:
     name: str
-    score: float
+    score: float | None
     weight: float
     explanation: str = ""
+    available: bool = True
 
     @property
     def weighted(self) -> float:
-        return self.score * self.weight
+        return (self.score or 0.0) * self.weight
 
     @property
     def contribution_pct(self) -> float:
         return self.weighted
 
-    def as_dict(self) -> dict[str, float | str]:
+    def as_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
-            "score": round(self.score, 2),
+            "score": round(self.score, 2) if self.score is not None else None,
             "weight": round(self.weight, 4),
             "weighted_contribution": round(self.weighted, 2),
             "contribution_pct": round(self.contribution_pct, 2),
             "explanation": self.explanation,
+            "available": self.available,
         }
 
 
@@ -52,7 +53,7 @@ class DecisionResult:
     strengths: list[str] = field(default_factory=list)
     contextual: dict[str, float] = field(default_factory=dict)
 
-    def breakdown_dict(self) -> dict[str, list[dict[str, float | str]]]:
+    def breakdown_dict(self) -> dict[str, list[dict[str, object]]]:
         return {
             "strategic": [item.as_dict() for item in self.strategic_breakdown],
             "tactical": [item.as_dict() for item in self.tactical_breakdown],
@@ -60,8 +61,6 @@ class DecisionResult:
 
 
 class DecisionEngine:
-    """Convert normalized 0-100 evidence into transparent verdicts."""
-
     BUY = 80.0
     ACCUMULATE = 70.0
     HOLD = 50.0
@@ -83,19 +82,43 @@ class DecisionEngine:
         return "VENDER"
 
     @staticmethod
-    def _score(value: object, default: float = 50.0) -> float:
+    def _score(value: object, default: float | None = 50.0) -> float | None:
+        if value is None:
+            return default
         try:
-            value = float(value)
+            return max(0.0, min(100.0, float(value)))
         except (TypeError, ValueError):
-            value = default
-        return max(0.0, min(100.0, value))
+            return default
 
     def _weighted(self, data: Mapping[str, object], weights: Mapping[str, float]):
-        items: list[ScoreComponent] = []
+        available_items: list[ScoreComponent] = []
+        unavailable: list[ScoreComponent] = []
         for key, weight in weights.items():
-            score = self._score(data.get(key, 50.0))
-            items.append(ScoreComponent(key, score, weight))
-        return sum(item.weighted for item in items), items
+            raw = data.get(key)
+            available = raw is not None and not (
+                isinstance(raw, Mapping) and raw.get("available") is False
+            )
+            score = self._score(
+                raw.get("score") if isinstance(raw, Mapping) else raw,
+                default=None,
+            ) if available else None
+            item = ScoreComponent(
+                key,
+                score,
+                weight,
+                available=available,
+                explanation="Disponible" if available else "NO DISPONIBLE — no participa en el promedio",
+            )
+            (available_items if available else unavailable).append(item)
+
+        if not available_items:
+            return 50.0, unavailable, ["Ningún componente disponible"]
+
+        effective_weight_total = sum(item.weight for item in available_items)
+        for item in available_items:
+            item.weight = item.weight / effective_weight_total
+        total = sum(item.weighted for item in available_items)
+        return total, available_items + unavailable, []
 
     def strategic(self, data: Mapping[str, object]):
         return self._weighted(data, STRATEGIC)
@@ -107,19 +130,11 @@ class DecisionEngine:
     def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float, technical_data_quality: float = 100.0) -> float:
         values = [provider_quality, freshness, consistency, completeness, technical_data_quality]
         values = [max(0.0, min(100.0, float(v))) for v in values]
-        # Technical data quality is an explicit confidence modifier, not a vote.
-        return round(
-            values[0] * 0.27
-            + values[1] * 0.18
-            + values[2] * 0.27
-            + values[3] * 0.18
-            + values[4] * 0.10,
-            2,
-        )
+        return round(values[0] * 0.27 + values[1] * 0.18 + values[2] * 0.27 + values[3] * 0.18 + values[4] * 0.10, 2)
 
     def evaluate(self, strategic_scores: Mapping[str, object], tactical_scores: Mapping[str, object], confidence_inputs: Mapping[str, object], strengths: list[str] | None = None, red_flags: list[str] | None = None, contextual: Mapping[str, object] | None = None) -> DecisionResult:
-        strategic_total, strategic_items = self.strategic(strategic_scores)
-        tactical_total, tactical_items = self.tactical(tactical_scores)
+        strategic_total, strategic_items, strategic_warnings = self.strategic(strategic_scores)
+        tactical_total, tactical_items, tactical_warnings = self.tactical(tactical_scores)
         confidence = self.confidence(
             confidence_inputs.get("provider_quality", 80),
             confidence_inputs.get("freshness", 80),
@@ -127,7 +142,12 @@ class DecisionEngine:
             confidence_inputs.get("completeness", 80),
             confidence_inputs.get("technical_data_quality", 100),
         )
-        context = {key: self._score(value) for key, value in (contextual or {}).items()}
+        context = {key: self._score(value) for key, value in (contextual or {}).items() if self._score(value) is not None}
+        flags = list(red_flags or [])
+        flags.extend(strategic_warnings + tactical_warnings)
+        for item in strategic_items + tactical_items:
+            if not item.available:
+                flags.append(f"{item.name}: NO DISPONIBLE; excluido del promedio ponderado")
         return DecisionResult(
             strategic_score=round(strategic_total, 2),
             tactical_score=round(tactical_total, 2),
@@ -137,7 +157,7 @@ class DecisionEngine:
             strategic_breakdown=strategic_items,
             tactical_breakdown=tactical_items,
             strengths=list(strengths or []),
-            red_flags=list(red_flags or []),
+            red_flags=list(dict.fromkeys(flags)),
             contextual=context,
         )
 
@@ -151,19 +171,9 @@ class DecisionEngine:
         print(f"Confianza:          {result.confidence:.1f}%")
         print("\nDESGLOSE ESTRATÉGICO")
         for item in result.strategic_breakdown:
-            print(f"  {item.name:15s} score={item.score:6.2f} peso={item.weight:.0%} aporte={item.weighted:6.2f}")
+            score = f"{item.score:.2f}" if item.score is not None else "N/D"
+            print(f"  {item.name:15s} score={score:>6} peso={item.weight:.1%} aporte={item.weighted:6.2f} {'[NO DISP]' if not item.available else ''}")
         print("\nDESGLOSE TÁCTICO")
         for item in result.tactical_breakdown:
-            print(f"  {item.name:15s} score={item.score:6.2f} peso={item.weight:.0%} aporte={item.weighted:6.2f}")
-        if result.contextual:
-            print("\nCONTEXTO (NO VOTA)")
-            for key, value in result.contextual.items():
-                print(f"  {key:15s} {value:6.2f}")
-        if result.strengths:
-            print("\nFORTALEZAS")
-            for item in result.strengths:
-                print(f"  + {item}")
-        if result.red_flags:
-            print("\nRED FLAGS")
-            for item in result.red_flags:
-                print(f"  - {item}")
+            score = f"{item.score:.2f}" if item.score is not None else "N/D"
+            print(f"  {item.name:15s} score={score:>6} peso={item.weight:.1%} aporte={item.weighted:6.2f} {'[NO DISP]' if not item.available else ''}")
