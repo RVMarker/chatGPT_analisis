@@ -14,7 +14,15 @@ class TechnicalModule:
     def run(self, context):
         price = context.price
         if price is None:
-            return {"score": 50.0, "available": False, "reason": "Sin PriceData"}
+            result = {
+                "score": None,
+                "available": False,
+                "reason": "Sin PriceData",
+                "evidence": [],
+                "data_quality": "unavailable",
+            }
+            context.technical_result = result
+            return result
 
         current = _num(getattr(price, "current", None))
         previous = _num(getattr(price, "previous_close", None))
@@ -38,11 +46,11 @@ class TechnicalModule:
                 evidence.append({"metric": "intraday_position", "value": position})
 
         result = {
-            "score": round(max(0.0, min(100.0, score)), 2),
+            "score": round(max(0.0, min(100.0, score)), 2) if evidence else None,
             "available": bool(evidence),
             "evidence": evidence,
             "history_required_for": ["RSI", "MACD", "EMA20", "SMA50", "SMA200", "ATR", "ADX", "Bollinger"],
-            "data_quality": "snapshot_only",
+            "data_quality": "snapshot_only" if evidence else "unavailable",
         }
         context.technical_result = result
         return result
