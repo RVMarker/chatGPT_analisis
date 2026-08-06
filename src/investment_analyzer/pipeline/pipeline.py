@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
+from investment_analyzer.pipeline.decision_module import DecisionModule
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.providers.provider_manager import ProviderManager
@@ -9,23 +10,22 @@ from investment_analyzer.security.asset_loader import AssetLoader
 
 
 class AnalysisPipeline:
-    def __init__(self, providers, modules, financial_adapter=None, financial_loader=None, asset_loader=None):
+    def __init__(self, providers, modules, financial_adapter=None, financial_loader=None,
+                 asset_loader=None, decision_module=None):
         self.providers = providers
         self.modules = modules
         self.asset_loader = asset_loader or AssetLoader()
         self.financial_loader = financial_loader or self._build_financial_loader(providers)
         self.financial_adapter = financial_adapter or FinancialModuleAdapter()
+        self.decision_module = decision_module or DecisionModule()
 
     @staticmethod
     def _build_financial_loader(providers):
-        """Use the application ProviderManager when one is supplied."""
         if isinstance(providers, ProviderManager):
             return FinancialDataLoader(provider_manager=providers)
         return FinancialDataLoader()
 
     def run(self, ticker: str) -> AnalysisContext:
-        # The user-facing ticker is the canonical Yahoo Finance symbol.
-        # Provider-specific nomenclature stays behind SecurityMaster/adapters.
         asset = self.asset_loader.load(ticker)
         context = AnalysisContext(asset=asset)
         snapshot = self.financial_loader.load(asset.symbol)
@@ -47,5 +47,7 @@ class AnalysisPipeline:
         context.elliott = self.modules.elliott.run(context)
         context.dow = self.modules.dow.run(context)
         context.backtest = self.modules.backtest.run(context)
-        context.decision = self.modules.decision.run(context)
+
+        # Final decision is produced by the V11 transparent engine.
+        self.decision_module.run(context)
         return context
