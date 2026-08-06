@@ -104,21 +104,41 @@ class DecisionEngine:
         return self._weighted(data, TACTICAL)
 
     @staticmethod
-    def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float) -> float:
-        values = [provider_quality, freshness, consistency, completeness]
+    def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float, technical_data_quality: float = 100.0) -> float:
+        values = [provider_quality, freshness, consistency, completeness, technical_data_quality]
         values = [max(0.0, min(100.0, float(v))) for v in values]
-        return round(values[0] * 0.30 + values[1] * 0.20 + values[2] * 0.30 + values[3] * 0.20, 2)
+        # Technical data quality is an explicit confidence modifier, not a vote.
+        return round(
+            values[0] * 0.27
+            + values[1] * 0.18
+            + values[2] * 0.27
+            + values[3] * 0.18
+            + values[4] * 0.10,
+            2,
+        )
 
     def evaluate(self, strategic_scores: Mapping[str, object], tactical_scores: Mapping[str, object], confidence_inputs: Mapping[str, object], strengths: list[str] | None = None, red_flags: list[str] | None = None, contextual: Mapping[str, object] | None = None) -> DecisionResult:
         strategic_total, strategic_items = self.strategic(strategic_scores)
         tactical_total, tactical_items = self.tactical(tactical_scores)
-        confidence = self.confidence(confidence_inputs.get("provider_quality", 80), confidence_inputs.get("freshness", 80), confidence_inputs.get("consistency", 80), confidence_inputs.get("completeness", 80))
+        confidence = self.confidence(
+            confidence_inputs.get("provider_quality", 80),
+            confidence_inputs.get("freshness", 80),
+            confidence_inputs.get("consistency", 80),
+            confidence_inputs.get("completeness", 80),
+            confidence_inputs.get("technical_data_quality", 100),
+        )
         context = {key: self._score(value) for key, value in (contextual or {}).items()}
         return DecisionResult(
-            strategic_score=round(strategic_total, 2), tactical_score=round(tactical_total, 2),
-            strategic_decision=self._decision(strategic_total), tactical_decision=self._decision(tactical_total),
-            confidence=confidence, strategic_breakdown=strategic_items, tactical_breakdown=tactical_items,
-            strengths=list(strengths or []), red_flags=list(red_flags or []), contextual=context,
+            strategic_score=round(strategic_total, 2),
+            tactical_score=round(tactical_total, 2),
+            strategic_decision=self._decision(strategic_total),
+            tactical_decision=self._decision(tactical_total),
+            confidence=confidence,
+            strategic_breakdown=strategic_items,
+            tactical_breakdown=tactical_items,
+            strengths=list(strengths or []),
+            red_flags=list(red_flags or []),
+            contextual=context,
         )
 
     @staticmethod
