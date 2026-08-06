@@ -8,19 +8,10 @@ from investment_analyzer.pipeline.decision_report import format_decision_report
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
+from investment_analyzer.pipeline.production_modules import UnavailableModule, YahooNewsModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
-
-
-class UnsupportedModule:
-    """Explicit fail-fast placeholder for a module not wired into production."""
-
-    def __init__(self, name: str):
-        self.name = name
-
-    def run(self, context):
-        raise RuntimeError(f"Módulo V11 no conectado todavía: {self.name}")
 
 
 @dataclass(slots=True)
@@ -36,7 +27,11 @@ class ModuleBundle:
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
-    """Build the real provider/data stack used by the CLI composition root."""
+    """Build the production stack used by the CLI.
+
+    Modules without a production data source return explicit N/D payloads;
+    they never abort the complete analysis or fabricate a neutral score.
+    """
     registry, manager = build_provider_stack(
         yahoo_provider=yahoo_provider,
         fmp_provider=fmp_provider,
@@ -46,13 +41,13 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
 
     modules = ModuleBundle(
         technical=TechnicalModule(),
-        comparables=UnsupportedModule("comparables"),
-        sentiment=UnsupportedModule("sentiment"),
-        macro=UnsupportedModule("macro"),
-        porter=UnsupportedModule("porter"),
-        elliott=UnsupportedModule("elliott"),
-        dow=UnsupportedModule("dow"),
-        backtest=UnsupportedModule("backtest"),
+        comparables=UnavailableModule("comparables"),
+        sentiment=YahooNewsModule(manager),
+        macro=UnavailableModule("macro"),
+        porter=UnavailableModule("porter"),
+        elliott=UnavailableModule("elliott"),
+        dow=UnavailableModule("dow"),
+        backtest=UnavailableModule("backtest"),
     )
 
     pipeline = AnalysisPipeline(
