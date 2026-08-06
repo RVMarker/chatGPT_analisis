@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 
+from investment_analyzer.app import build_application
 from investment_analyzer.pipeline.decision_report import format_decision_report
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 
@@ -22,10 +23,7 @@ def run_cli(ticker: str, pipeline: AnalysisPipeline) -> int:
 def main(pipeline: AnalysisPipeline | None = None) -> int:
     args = build_parser().parse_args()
     if pipeline is None:
-        raise RuntimeError(
-            "No hay una factory de producción configurada. "
-            "Construye AnalysisPipeline desde el launcher de la aplicación."
-        )
+        pipeline, _, _ = build_application()
     return run_cli(args.ticker, pipeline)
 
 
