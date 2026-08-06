@@ -42,8 +42,8 @@ class ScoreComponent:
 
 @dataclass(slots=True)
 class DecisionResult:
-    strategic_score: float
-    tactical_score: float
+    strategic_score: float | None
+    tactical_score: float | None
     strategic_decision: str
     tactical_decision: str
     confidence: float
@@ -70,7 +70,9 @@ class DecisionEngine:
         validate_weights()
 
     @classmethod
-    def _decision(cls, score: float) -> str:
+    def _decision(cls, score: float | None) -> str:
+        if score is None:
+            return "N/D"
         if score >= cls.BUY:
             return "COMPRAR"
         if score >= cls.ACCUMULATE:
@@ -82,7 +84,7 @@ class DecisionEngine:
         return "VENDER"
 
     @staticmethod
-    def _score(value: object, default: float | None = 50.0) -> float | None:
+    def _score(value: object, default: float | None = None) -> float | None:
         if value is None:
             return default
         try:
@@ -106,13 +108,16 @@ class DecisionEngine:
                 key,
                 score,
                 weight,
-                available=available,
-                explanation="Disponible" if available else "NO DISPONIBLE — no participa en el promedio",
+                available=available and score is not None,
+                explanation="Disponible" if available and score is not None else "NO DISPONIBLE — no participa en el promedio",
             )
-            (available_items if available else unavailable).append(item)
+            if item.available:
+                available_items.append(item)
+            else:
+                unavailable.append(item)
 
         if not available_items:
-            return 50.0, unavailable, ["Ningún componente disponible"]
+            return None, unavailable, ["Ningún componente disponible; veredicto N/D"]
 
         effective_weight_total = sum(item.weight for item in available_items)
         for item in available_items:
@@ -142,15 +147,19 @@ class DecisionEngine:
             confidence_inputs.get("completeness", 80),
             confidence_inputs.get("technical_data_quality", 100),
         )
-        context = {key: self._score(value) for key, value in (contextual or {}).items() if self._score(value) is not None}
+        context = {}
+        for key, value in (contextual or {}).items():
+            score = self._score(value, default=None)
+            if score is not None:
+                context[key] = score
         flags = list(red_flags or [])
         flags.extend(strategic_warnings + tactical_warnings)
         for item in strategic_items + tactical_items:
             if not item.available:
                 flags.append(f"{item.name}: NO DISPONIBLE; excluido del promedio ponderado")
         return DecisionResult(
-            strategic_score=round(strategic_total, 2),
-            tactical_score=round(tactical_total, 2),
+            strategic_score=round(strategic_total, 2) if strategic_total is not None else None,
+            tactical_score=round(tactical_total, 2) if tactical_total is not None else None,
             strategic_decision=self._decision(strategic_total),
             tactical_decision=self._decision(tactical_total),
             confidence=confidence,
@@ -166,8 +175,10 @@ class DecisionEngine:
         print("=" * 80)
         print("DECISION ENGINE V11")
         print("=" * 80)
-        print(f"Estratégico (años): {result.strategic_decision} | {result.strategic_score:.2f}/100")
-        print(f"Táctico (semanas):  {result.tactical_decision} | {result.tactical_score:.2f}/100")
+        strategic_score = f"{result.strategic_score:.2f}/100" if result.strategic_score is not None else "N/D"
+        tactical_score = f"{result.tactical_score:.2f}/100" if result.tactical_score is not None else "N/D"
+        print(f"Estratégico (años): {result.strategic_decision} | {strategic_score}")
+        print(f"Táctico (semanas):  {result.tactical_decision} | {tactical_score}")
         print(f"Confianza:          {result.confidence:.1f}%")
         print("\nDESGLOSE ESTRATÉGICO")
         for item in result.strategic_breakdown:
