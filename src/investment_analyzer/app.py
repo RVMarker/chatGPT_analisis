@@ -1,8 +1,4 @@
-"""Production composition root for the V11 analyzer.
-
-This module assembles the provider/data layers without pretending that
-analysis modules not yet implemented are production-ready.
-"""
+"""Production composition root for the V11 analyzer."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +8,7 @@ from investment_analyzer.pipeline.decision_report import format_decision_report
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
+from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
 
@@ -48,7 +45,7 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
     data_loader = FinancialDataLoader(provider_manager=manager)
 
     modules = ModuleBundle(
-        technical=UnsupportedModule("technical"),
+        technical=TechnicalModule(),
         comparables=UnsupportedModule("comparables"),
         sentiment=UnsupportedModule("sentiment"),
         macro=UnsupportedModule("macro"),
