@@ -8,14 +8,31 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+from investment_analyzer.common.models import PriceHistory
 from .tactical_models import Evidence, TacticalSignal
 
 
 class SmartMoneyEngine:
     """Estimate price/volume accumulation pressure from observable data."""
 
-    def analyze(self, history: Iterable[Mapping[str, Any]] | None) -> TacticalSignal:
-        rows = list(history or [])
+    @staticmethod
+    def _rows(history: PriceHistory | Iterable[Mapping[str, Any]] | None):
+        if history is None:
+            return []
+        if isinstance(history, PriceHistory):
+            size = min(len(history.close), len(history.volume))
+            return [
+                {
+                    "close": history.close[i],
+                    "volume": history.volume[i],
+                    "date": history.dates[i] if i < len(history.dates) else None,
+                }
+                for i in range(size)
+            ]
+        return list(history)
+
+    def analyze(self, history: PriceHistory | Iterable[Mapping[str, Any]] | None) -> TacticalSignal:
+        rows = self._rows(history)
         if len(rows) < 2:
             return TacticalSignal(
                 score=None,
