@@ -13,6 +13,12 @@ class FMPProvider(ProviderBase):
     def get_price(self, symbol: str):
         return self.client.get_price(symbol)
 
+    def get_financial_statements(self, symbol: str):
+        """Return the normalized FinancialStatements object from the client."""
+        if hasattr(self.client, "get_financial_statements"):
+            return self.client.get_financial_statements(symbol)
+        raise AttributeError("FMP client debe implementar get_financial_statements() normalizado")
+
     def get_balance_sheet(self, symbol: str):
         return self.client.get_balance_sheet(symbol)
 
