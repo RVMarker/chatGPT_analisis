@@ -5,7 +5,6 @@ Comparables and macro are contextual evidence only and never vote in either
 verdict. This prevents double-counting valuation context and makes the score
 explainable.
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -25,6 +24,20 @@ class ScoreComponent:
     def weighted(self) -> float:
         return self.score * self.weight
 
+    @property
+    def contribution_pct(self) -> float:
+        return self.weighted
+
+    def as_dict(self) -> dict[str, float | str]:
+        return {
+            "name": self.name,
+            "score": round(self.score, 2),
+            "weight": round(self.weight, 4),
+            "weighted_contribution": round(self.weighted, 2),
+            "contribution_pct": round(self.contribution_pct, 2),
+            "explanation": self.explanation,
+        }
+
 
 @dataclass(slots=True)
 class DecisionResult:
@@ -38,6 +51,12 @@ class DecisionResult:
     red_flags: list[str] = field(default_factory=list)
     strengths: list[str] = field(default_factory=list)
     contextual: dict[str, float] = field(default_factory=dict)
+
+    def breakdown_dict(self) -> dict[str, list[dict[str, float | str]]]:
+        return {
+            "strategic": [item.as_dict() for item in self.strategic_breakdown],
+            "tactical": [item.as_dict() for item in self.tactical_breakdown],
+        }
 
 
 class DecisionEngine:
@@ -85,54 +104,21 @@ class DecisionEngine:
         return self._weighted(data, TACTICAL)
 
     @staticmethod
-    def confidence(
-        provider_quality: float,
-        freshness: float,
-        consistency: float,
-        completeness: float,
-    ) -> float:
+    def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float) -> float:
         values = [provider_quality, freshness, consistency, completeness]
         values = [max(0.0, min(100.0, float(v))) for v in values]
-        return round(
-            values[0] * 0.30
-            + values[1] * 0.20
-            + values[2] * 0.30
-            + values[3] * 0.20,
-            2,
-        )
+        return round(values[0] * 0.30 + values[1] * 0.20 + values[2] * 0.30 + values[3] * 0.20, 2)
 
-    def evaluate(
-        self,
-        strategic_scores: Mapping[str, object],
-        tactical_scores: Mapping[str, object],
-        confidence_inputs: Mapping[str, object],
-        strengths: list[str] | None = None,
-        red_flags: list[str] | None = None,
-        contextual: Mapping[str, object] | None = None,
-    ) -> DecisionResult:
+    def evaluate(self, strategic_scores: Mapping[str, object], tactical_scores: Mapping[str, object], confidence_inputs: Mapping[str, object], strengths: list[str] | None = None, red_flags: list[str] | None = None, contextual: Mapping[str, object] | None = None) -> DecisionResult:
         strategic_total, strategic_items = self.strategic(strategic_scores)
         tactical_total, tactical_items = self.tactical(tactical_scores)
-        confidence = self.confidence(
-            confidence_inputs.get("provider_quality", 80),
-            confidence_inputs.get("freshness", 80),
-            confidence_inputs.get("consistency", 80),
-            confidence_inputs.get("completeness", 80),
-        )
-        context = {
-            key: self._score(value)
-            for key, value in (contextual or {}).items()
-        }
+        confidence = self.confidence(confidence_inputs.get("provider_quality", 80), confidence_inputs.get("freshness", 80), confidence_inputs.get("consistency", 80), confidence_inputs.get("completeness", 80))
+        context = {key: self._score(value) for key, value in (contextual or {}).items()}
         return DecisionResult(
-            strategic_score=round(strategic_total, 2),
-            tactical_score=round(tactical_total, 2),
-            strategic_decision=self._decision(strategic_total),
-            tactical_decision=self._decision(tactical_total),
-            confidence=confidence,
-            strategic_breakdown=strategic_items,
-            tactical_breakdown=tactical_items,
-            strengths=list(strengths or []),
-            red_flags=list(red_flags or []),
-            contextual=context,
+            strategic_score=round(strategic_total, 2), tactical_score=round(tactical_total, 2),
+            strategic_decision=self._decision(strategic_total), tactical_decision=self._decision(tactical_total),
+            confidence=confidence, strategic_breakdown=strategic_items, tactical_breakdown=tactical_items,
+            strengths=list(strengths or []), red_flags=list(red_flags or []), contextual=context,
         )
 
     @staticmethod
