@@ -10,7 +10,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
+from investment_analyzer.common.models import (
+    BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData, PriceHistory,
+)
 
 
 class YahooFinanceAdapter:
@@ -57,6 +59,30 @@ class YahooFinanceAdapter:
             except (KeyError, TypeError, AttributeError):
                 continue
         return None
+
+    def price_history(self, symbol: str, period: str = "2y", interval: str = "1d") -> PriceHistory:
+        """Return cleaned historical OHLCV needed by technical analysis."""
+        ticker = self._ticker(symbol)
+        frame = ticker.history(period=period, interval=interval, auto_adjust=False)
+        if frame is None or getattr(frame, "empty", True):
+            raise ValueError(f"Yahoo no devolvió histórico para {symbol}")
+
+        required = ("Open", "High", "Low", "Close", "Volume")
+        missing = [column for column in required if column not in frame.columns]
+        if missing:
+            raise ValueError(f"Yahoo histórico incompleto para {symbol}: faltan {', '.join(missing)}")
+
+        frame = frame.dropna(subset=["Close"]).copy()
+        return PriceHistory(
+            symbol=symbol.upper(),
+            dates=list(frame.index),
+            open=[float(x) for x in frame["Open"].fillna(frame["Close"]).tolist()],
+            high=[float(x) for x in frame["High"].fillna(frame["Close"]).tolist()],
+            low=[float(x) for x in frame["Low"].fillna(frame["Close"]).tolist()],
+            close=[float(x) for x in frame["Close"].tolist()],
+            volume=[float(x) for x in frame["Volume"].fillna(0).tolist()],
+            interval=interval,
+        )
 
     def price(self, symbol: str) -> PriceData:
         ticker = self._ticker(symbol)
