@@ -5,22 +5,22 @@ from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
 
 
 class DecisionModule:
-    """Build the two-horizon verdict from the shared AnalysisContext.
-
-    Comparables and macro are deliberately passed only as contextual evidence;
-    they never enter the weighted strategic/tactical scores.
-    """
+    """Build the two-horizon verdict from the shared AnalysisContext."""
 
     def __init__(self, engine: DecisionEngine | None = None):
         self.engine = engine or DecisionEngine()
 
     @staticmethod
-    def _score(value, default=50.0):
+    def _score(value, default=None):
         if isinstance(value, dict):
+            if value.get("available") is False:
+                return None
             for key in ("score", "total_score", "normalized_score", "rating"):
                 if key in value:
                     value = value[key]
                     break
+        if value is None:
+            return default
         try:
             return max(0.0, min(100.0, float(value)))
         except (TypeError, ValueError):
@@ -29,26 +29,32 @@ class DecisionModule:
     @staticmethod
     def _technical_quality(context):
         result = getattr(context, "technical_result", {}) or {}
-        if not isinstance(result, dict):
-            return 50.0
-        if not result.get("available", False):
+        if hasattr(result, "metadata"):
+            metadata = result.metadata or {}
+            available = bool(metadata.get("available", True))
+            requirements = metadata.get("requirements", {}) or {}
+        elif isinstance(result, dict):
+            available = bool(result.get("available", False))
+            requirements = result.get("requirements", {}) or {}
+        else:
             return 40.0
-        requirements = result.get("requirements", {}) or {}
+        if not available:
+            return 40.0
         if not requirements:
             return 60.0
-        available = sum(bool(v) for v in requirements.values())
-        return round(50.0 + 50.0 * available / len(requirements), 2)
+        satisfied = sum(bool(v) for v in requirements.values())
+        return round(50.0 + 50.0 * satisfied / len(requirements), 2)
 
     @staticmethod
     def _collect_strengths(context):
         strengths = []
         technical = getattr(context, "technical", {}) or {}
-        if isinstance(technical, dict):
-            score = DecisionModule._score(technical)
-            if score >= 70:
-                strengths.append(f"Technical score favorable ({score:.1f}/100)")
+        technical_score = DecisionModule._score(technical)
+        if technical_score is not None and technical_score >= 70:
+            strengths.append(f"Technical score favorable ({technical_score:.1f}/100)")
         fundamentals = getattr(context, "fundamentals", {}) or {}
-        if isinstance(fundamentals, dict) and DecisionModule._score(fundamentals) >= 70:
+        fundamental_score = DecisionModule._score(fundamentals)
+        if fundamental_score is not None and fundamental_score >= 70:
             strengths.append("Fundamental score favorable")
         return strengths
 
@@ -66,7 +72,7 @@ class DecisionModule:
         risk = self._score(context.risk)
         technical = self._score(context.technical)
         sentiment = self._score(context.sentiment)
-        smart_money = self._score(context.metadata.get("smart_money", 50.0))
+        smart_money = self._score(context.metadata.get("smart_money"))
 
         provider_data = context.metadata.get("data_providers", {})
         required = [provider_data.get("price"), provider_data.get("financials")]
@@ -76,16 +82,8 @@ class DecisionModule:
         freshness = 80.0 if provider_data.get("history") else 60.0
 
         result = self.engine.evaluate(
-            strategic_scores={
-                "fundamental": fundamental,
-                "valuation": valuation,
-                "risk": risk,
-            },
-            tactical_scores={
-                "technical": technical,
-                "sentiment": sentiment,
-                "smart_money": smart_money,
-            },
+            strategic_scores={"fundamental": fundamental, "valuation": valuation, "risk": risk},
+            tactical_scores={"technical": technical, "sentiment": sentiment, "smart_money": smart_money},
             confidence_inputs={
                 "provider_quality": provider_quality,
                 "freshness": freshness,
