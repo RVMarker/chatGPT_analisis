@@ -1,16 +1,12 @@
-"""Integration boundary for the real V11 fundamental/valuation/risk engines.
-
-This module intentionally performs no network I/O. Provider adapters are
-responsible for producing normalized FinancialStatements and PriceData.
-"""
+"""Integration boundary for the V11 fundamental/valuation/risk engines."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from investment_analyzer.analysis.fundamental import FundamentalEngine
+from investment_analyzer.analysis.fundamental.fundamental_engine import FundamentalEngine
 from investment_analyzer.analysis.risk.risk_engine import RiskEngine
-from investment_analyzer.analysis.valuation import DCFEngine, DCFResult
+from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine, DCFResult
 from investment_analyzer.common.models import FinancialStatements, PriceData
 
 
@@ -27,7 +23,7 @@ class IntegratedFinancialAnalysis:
 
 
 class FinancialAnalysisIntegrator:
-    """Run the three strategic engines against one normalized snapshot."""
+    """Run Fundamental/Risk and DCF only when explicit DCF assumptions exist."""
 
     def __init__(self, fundamental=None, valuation=None, risk=None):
         self.fundamental = fundamental or FundamentalEngine()
@@ -39,15 +35,13 @@ class FinancialAnalysisIntegrator:
         statements: FinancialStatements,
         price: PriceData,
         *,
-        growth_rates: list[float],
-        wacc: float,
-        terminal_growth: float,
+        growth_rates: list[float] | None = None,
+        wacc: float | None = None,
+        terminal_growth: float | None = None,
         net_debt: float | None = None,
     ) -> IntegratedFinancialAnalysis:
         if price.current <= 0:
             raise ValueError("El precio actual debe ser positivo")
-        if not growth_rates:
-            raise ValueError("Se requiere al menos una tasa de crecimiento para el DCF")
 
         fundamental = self.fundamental.calculate(statements)
         balance = statements.balance
@@ -55,29 +49,44 @@ class FinancialAnalysisIntegrator:
         if debt is None:
             debt = float(balance.long_term_debt or 0) - float(balance.cash or 0)
 
-        fcf = statements.cashflow.free_cash_flow
-        if fcf is None:
-            raise ValueError("Falta free_cash_flow para ejecutar el DCF")
-
-        dcf: DCFResult = self.valuation.calculate(
-            fcf_base=float(fcf),
-            growth_rates=growth_rates,
-            wacc=wacc,
-            terminal_growth=terminal_growth,
-            net_debt=debt,
-            shares_outstanding=price.shares_outstanding,
-            current_price=price.current,
-        )
         risk = self.risk.calculate(
             statements,
             market_value_equity=price.market_cap,
         )
 
+        valuation: dict[str, Any]
+        valuation_warnings: list[str] = []
+        if growth_rates and wacc is not None and terminal_growth is not None:
+            fcf = statements.cashflow.free_cash_flow
+            if fcf is not None:
+                dcf: DCFResult = self.valuation.calculate(
+                    fcf_base=float(fcf),
+                    growth_rates=growth_rates,
+                    wacc=float(wacc),
+                    terminal_growth=float(terminal_growth),
+                    net_debt=debt,
+                    shares_outstanding=price.shares_outstanding,
+                    current_price=price.current,
+                )
+                valuation = dcf.as_dict()
+                valuation_warnings.extend(dcf.warnings)
+            else:
+                valuation = {"available": False, "score": None, "warnings": ["Falta free_cash_flow para ejecutar el DCF"]}
+        else:
+            valuation = {
+                "available": False,
+                "score": None,
+                "warnings": [
+                    "DCF no ejecutado: faltan growth_rates, WACC y/o terminal_growth explícitos",
+                    "No se utiliza un supuesto artificial para producir una valoración",
+                ],
+            }
+
         strengths = list(dict.fromkeys(fundamental.strengths + risk.strengths))
-        red_flags = list(dict.fromkeys(fundamental.red_flags + risk.red_flags + dcf.warnings))
+        red_flags = list(dict.fromkeys(fundamental.red_flags + risk.red_flags + valuation_warnings + valuation.get("warnings", [])))
         return IntegratedFinancialAnalysis(
             fundamental=fundamental.as_dict(),
-            valuation=dcf.as_dict(),
+            valuation=valuation,
             risk=risk.as_dict(),
             strengths=strengths,
             red_flags=red_flags,
