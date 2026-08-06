@@ -1,6 +1,6 @@
 from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
-from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 from investment_analyzer.pipeline.financial_data_loader import FinancialSnapshot
+from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 from investment_analyzer.providers.provider_manager import ProviderManager
 
 
@@ -24,6 +24,7 @@ class Loader:
             ),
             price_provider="fmp", financials_provider="fmp",
             price_provider_symbol="FMTY14", financials_provider_symbol="FMTY14",
+            history=None, history_provider=None, history_provider_symbol=None,
         )
 
 
@@ -45,8 +46,10 @@ class Decision:
         assert context.metadata["data_providers"] == {
             "price": "fmp", "financials": "fmp",
             "price_symbol": "FMTY14", "financials_symbol": "FMTY14",
+            "history": None, "history_symbol": None, "history_length": 0,
         }
-        return {"strategic": "MANTENER"}
+        context.decision = {"strategic": "MANTENER"}
+        return context.decision
 
 
 class Modules:
@@ -58,16 +61,16 @@ class Modules:
     elliott = Recorder("elliott")
     dow = Recorder("dow")
     backtest = Recorder("backtest")
-    decision = Decision()
 
 
 def test_pipeline_uses_injected_financial_loader_and_preserves_provider_trace():
     pipeline = AnalysisPipeline(
         providers=ProviderManager(), modules=Modules(),
         financial_loader=Loader(), asset_loader=AssetLoader(),
-        financial_adapter=FinancialAdapter(),
+        financial_adapter=FinancialAdapter(), decision_module=Decision(),
     )
     result = pipeline.run("FMTY14.MX")
     assert result.price.symbol == "FMTY14.MX"
     assert result.metadata["data_providers"]["price_symbol"] == "FMTY14"
+    assert result.metadata["data_providers"]["history_length"] == 0
     assert result.decision["strategic"] == "MANTENER"
