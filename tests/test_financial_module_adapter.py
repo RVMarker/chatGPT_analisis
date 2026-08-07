@@ -4,11 +4,8 @@ from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapte
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
 
 
-def _context(asset_type="STOCK", ffo_proxy=None):
-    class Asset:
-        symbol = "TEST"
-        asset_type = asset_type
-
+def _context(kind="STOCK", ffo_proxy=None):
+    Asset = type("Asset", (), {"symbol": "TEST", "asset_type": kind})
     financials = FinancialStatements(
         balance=BalanceSheet(total_assets=1000, current_assets=400, cash=100, inventory=50,
                              receivables=100, total_liabilities=400, current_liabilities=200,
@@ -34,7 +31,7 @@ def test_adapter_populates_context_from_real_engines():
 
 
 def test_adapter_routes_fibra_to_reit_valuation():
-    context = _context(asset_type="REIT", ffo_proxy=300)
+    context = _context(kind="REIT", ffo_proxy=300)
     FinancialModuleAdapter(integrator=FinancialAnalysisIntegrator()).run(context)
     assert context.valuation["available"] is True
     assert context.valuation["model"] == "FFO_CAPITALIZATION"
