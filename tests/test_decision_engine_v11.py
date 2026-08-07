@@ -1,5 +1,7 @@
 """Regression tests for the V11 decision engine."""
 
+import pytest
+
 from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
 from investment_analyzer.analysis.decision.decision_weights import STRATEGIC, TACTICAL
 
@@ -85,9 +87,9 @@ def test_missing_components_are_excluded_and_weights_renormalized():
     assert result.tactical_score == 75.0
     assert result.strategic_decision == "MANTENER"
     assert result.tactical_decision == "ACUMULAR"
-    assert result.strategic_breakdown[0].weight == 2 / 3
+    assert result.strategic_breakdown[0].weight == pytest.approx(2 / 3)
     assert result.strategic_breakdown[1].available is False
-    assert result.tactical_breakdown[0].weight == 0.75
+    assert result.tactical_breakdown[0].weight == pytest.approx(0.75)
     assert result.tactical_breakdown[1].available is False
 
 
