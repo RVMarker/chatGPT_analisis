@@ -89,6 +89,10 @@ class AnalysisPipeline:
         sentiment_signal = self.sentiment_engine.analyze(self._extract_news(existing_sentiment))
         context.sentiment = sentiment_signal.as_dict()
         context.metadata["sentiment_evidence"] = context.sentiment.get("evidence", [])
+        context.metadata["sentiment_provider"] = existing_sentiment.get("provider") if isinstance(existing_sentiment, Mapping) else None
+        context.metadata["sentiment_provider_symbol"] = existing_sentiment.get("provider_symbol") if isinstance(existing_sentiment, Mapping) else None
+        context.metadata["sentiment_raw_count"] = existing_sentiment.get("raw_count", 0) if isinstance(existing_sentiment, Mapping) else 0
+        context.metadata["sentiment_normalized_count"] = existing_sentiment.get("normalized_count", 0) if isinstance(existing_sentiment, Mapping) else 0
 
         smart_money_signal = self.smart_money_engine.analyze(snapshot.history)
         context.metadata["smart_money"] = smart_money_signal.as_dict()
