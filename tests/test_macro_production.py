@@ -34,6 +34,7 @@ class FakeSession:
                 "UNRATE": "4.20",
                 "GDPC1": "2.40",
                 "DGS10": "4.30",
+                "IRLTLT01MXM156N": "9.45",
             }
             return FakeResponse({"observations": [{"date": "2026-07-01", "value": values[series]}]})
 
@@ -79,6 +80,9 @@ def test_mexican_asset_gets_us_and_mexico_macro(monkeypatch):
     assert result["mexico"]["policy_rate"] == 7.0
     assert result["mexico"]["inflation_yoy"] == 3.37
     assert result["mexico"]["usd_mxn"] == 17.90
+    assert result["mexico"]["treasury_10y"] == 9.45
+    assert result["mexico"]["treasury_10y_provider"] == "fred"
+    assert result["mexico"]["treasury_10y_series"] == "IRLTLT01MXM156N"
     assert result["required_margin"] == 30.0
 
 
@@ -102,6 +106,7 @@ def test_missing_credentials_keeps_macro_context_safe(monkeypatch):
     assert result["available"] is False
     assert result["us"]["policy_rate"] is None
     assert result["mexico"]["policy_rate"] is None
+    assert result["mexico"]["treasury_10y"] is None
     assert result["score"] is None
 
 
@@ -113,6 +118,7 @@ def test_banxico_http_error_is_non_fatal_and_redacts_server_token(monkeypatch):
 
     assert result["available"] is True  # FRED remains available.
     assert result["mexico"]["policy_rate"] is None
+    assert result["mexico"]["treasury_10y"] == 9.45  # 10Y fallback remains independent.
     errors = result["diagnostics"]["errors"]
     assert len(errors) == 1
     assert "Banxico batch: HTTPError HTTP 400" in errors[0]
