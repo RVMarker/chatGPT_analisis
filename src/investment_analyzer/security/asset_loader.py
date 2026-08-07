@@ -14,7 +14,10 @@ from investment_analyzer.security.security_master import SecurityMaster
 
 class AssetLoader:
     def __init__(self, security_master: SecurityMaster | None = None):
-        self.security_master = security_master or SecurityMaster()
+        if security_master is None:
+            security_master = SecurityMaster()
+            security_master.seed_production_defaults()
+        self.security_master = security_master
 
     @staticmethod
     def _canonical(symbol: str) -> str:
