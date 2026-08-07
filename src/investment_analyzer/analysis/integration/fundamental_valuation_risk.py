@@ -50,6 +50,8 @@ class FinancialAnalysisIntegrator:
 
         fundamental = self.fundamental.calculate(statements)
         balance = statements.balance
+        income = statements.income
+        cashflow = statements.cashflow
         debt = net_debt
         if debt is None:
             debt = float(balance.long_term_debt or 0) - float(balance.cash or 0)
@@ -59,22 +61,38 @@ class FinancialAnalysisIntegrator:
         valuation_warnings: list[str] = []
         is_reit = str(asset_type or "").upper() in {"REIT", "FIBRA"}
 
-        if is_reit and statements.cashflow.ffo_proxy is not None and price.shares_outstanding:
-            reit = self.reit_valuation.calculate(
-                ffo=float(statements.cashflow.ffo_proxy),
-                shares_outstanding=float(price.shares_outstanding),
-                current_price=float(price.current),
-                required_yield=reit_required_yield,
-                growth=reit_growth,
-                source_quality="FFO_PROXY",
-            )
-            valuation = reit.as_dict()
-            valuation["model"] = "FFO_CAPITALIZATION"
-            valuation["ffo_proxy"] = statements.cashflow.ffo_proxy
-            valuation["assumptions"] = {"required_yield": reit_required_yield, "growth": reit_growth}
-            valuation_warnings.extend(reit.warnings)
+        if is_reit and price.shares_outstanding:
+            # Prefer official FFO/AFFO when the provider supplies it. Only fall
+            # back to the explicitly labelled proxy; never infer AFFO from FCF.
+            ffo = cashflow.ffo_official if cashflow.ffo_official is not None else cashflow.ffo_proxy
+            source_quality = "FFO_OFFICIAL" if cashflow.ffo_official is not None else "FFO_PROXY"
+            if ffo is not None:
+                reit = self.reit_valuation.calculate(
+                    ffo=float(ffo),
+                    shares_outstanding=float(price.shares_outstanding),
+                    current_price=float(price.current),
+                    required_yield=reit_required_yield,
+                    growth=reit_growth,
+                    source_quality=source_quality,
+                    affo=cashflow.affo_official,
+                    distribution=cashflow.dividends_paid,
+                    property_value=balance.property_value,
+                    net_debt=debt,
+                    ebitda=income.ebitda,
+                    interest_expense=income.interest_expense,
+                )
+                valuation = reit.as_dict()
+                valuation["model"] = "FFO_CAPITALIZATION"
+                valuation["ffo_proxy"] = cashflow.ffo_proxy
+                valuation["ffo_official"] = cashflow.ffo_official
+                valuation["affo_official"] = cashflow.affo_official
+                valuation["assumptions"] = {"required_yield": reit_required_yield, "growth": reit_growth}
+                valuation_warnings.extend(reit.warnings)
+            else:
+                valuation = {"available": False, "score": None, "model": "FFO_CAPITALIZATION",
+                              "warnings": ["FIBRA/REIT detectado pero no existe FFO disponible"]}
         elif growth_rates and wacc is not None and terminal_growth is not None:
-            fcf = statements.cashflow.free_cash_flow
+            fcf = cashflow.free_cash_flow
             if fcf is not None:
                 dcf: DCFResult = self.valuation.calculate(
                     fcf_base=float(fcf), growth_rates=growth_rates,
