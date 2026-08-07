@@ -30,15 +30,7 @@ class ScoreComponent:
         return self.weighted
 
     def as_dict(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "score": round(self.score, 2) if self.score is not None else None,
-            "weight": round(self.weight, 4),
-            "weighted_contribution": round(self.weighted, 2),
-            "contribution_pct": round(self.contribution_pct, 2),
-            "explanation": self.explanation,
-            "available": self.available,
-        }
+        return {"name": self.name, "score": round(self.score, 2) if self.score is not None else None, "weight": round(self.weight, 4), "weighted_contribution": round(self.weighted, 2), "contribution_pct": round(self.contribution_pct, 2), "explanation": self.explanation, "available": self.available}
 
 
 @dataclass(slots=True)
@@ -53,12 +45,11 @@ class DecisionResult:
     red_flags: list[str] = field(default_factory=list)
     strengths: list[str] = field(default_factory=list)
     contextual: dict[str, float] = field(default_factory=dict)
+    data_coverage: float = 100.0
+    base_confidence: float = 100.0
 
     def breakdown_dict(self) -> dict[str, list[dict[str, object]]]:
-        return {
-            "strategic": [item.as_dict() for item in self.strategic_breakdown],
-            "tactical": [item.as_dict() for item in self.tactical_breakdown],
-        }
+        return {"strategic": [item.as_dict() for item in self.strategic_breakdown], "tactical": [item.as_dict() for item in self.tactical_breakdown]}
 
 
 class DecisionEngine:
@@ -72,129 +63,69 @@ class DecisionEngine:
 
     @classmethod
     def _decision(cls, score: float | None) -> str:
-        if score is None:
-            return "N/D"
-        if score >= cls.BUY:
-            return "COMPRAR"
-        if score >= cls.ACCUMULATE:
-            return "ACUMULAR"
-        if score >= cls.HOLD:
-            return "MANTENER"
-        if score >= cls.REDUCE:
-            return "REDUCIR"
+        if score is None: return "N/D"
+        if score >= cls.BUY: return "COMPRAR"
+        if score >= cls.ACCUMULATE: return "ACUMULAR"
+        if score >= cls.HOLD: return "MANTENER"
+        if score >= cls.REDUCE: return "REDUCIR"
         return "VENDER"
 
     @staticmethod
     def _score(value: object, default: float | None = None) -> float | None:
-        if value is None:
-            return default
-        try:
-            return max(0.0, min(100.0, float(value)))
-        except (TypeError, ValueError):
-            return default
+        if value is None: return default
+        try: return max(0.0, min(100.0, float(value)))
+        except (TypeError, ValueError): return default
 
     @staticmethod
     def _normalize_weight(weight: float, total: float) -> float:
-        """Normalize with decimal arithmetic to avoid binary float artifacts.
-
-        Converting the already validated float weights through ``str`` keeps
-        their declared decimal meaning (e.g. 0.60 / 0.80 = exactly 0.75 as a
-        float) while still returning the public API's float type. This avoids
-        artifacts such as 0.7499999999999999 without hard-coding any weight.
-        """
         return float(Decimal(str(weight)) / Decimal(str(total)))
 
     def _weighted(self, data: Mapping[str, object], weights: Mapping[str, float]):
-        items: list[ScoreComponent] = []
+        items = []
         for key, weight in weights.items():
             raw = data.get(key)
-            available = raw is not None and not (
-                isinstance(raw, Mapping) and raw.get("available") is False
-            )
-            score = (
-                self._score(raw.get("score"), default=None)
-                if isinstance(raw, Mapping) and available
-                else self._score(raw, default=None) if available else None
-            )
-            item = ScoreComponent(
-                key,
-                score,
-                weight,
-                available=available and score is not None,
-                explanation="Disponible" if available and score is not None else "NO DISPONIBLE — no participa en el promedio",
-            )
-            items.append(item)
-
+            available = raw is not None and not (isinstance(raw, Mapping) and raw.get("available") is False)
+            score = self._score(raw.get("score")) if isinstance(raw, Mapping) and available else self._score(raw) if available else None
+            items.append(ScoreComponent(key, score, weight, available=available and score is not None, explanation="Disponible" if available and score is not None else "NO DISPONIBLE — no participa en el promedio"))
         available_items = [item for item in items if item.available]
-        if not available_items:
-            return None, items, ["Ningún componente disponible; veredicto N/D"]
-
-        effective_weight_total = sum(item.weight for item in available_items)
-        for item in available_items:
-            item.weight = self._normalize_weight(item.weight, effective_weight_total)
-        total = sum(item.weighted for item in available_items)
-        return total, items, []
-
-    def strategic(self, data: Mapping[str, object]):
-        return self._weighted(data, STRATEGIC)
-
-    def tactical(self, data: Mapping[str, object]):
-        return self._weighted(data, TACTICAL)
+        if not available_items: return None, items, ["Ningún componente disponible; veredicto N/D"]
+        total_weight = sum(item.weight for item in available_items)
+        for item in available_items: item.weight = self._normalize_weight(item.weight, total_weight)
+        return sum(item.weighted for item in available_items), items, []
 
     @staticmethod
-    def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float, technical_data_quality: float = 100.0) -> float:
-        values = [provider_quality, freshness, consistency, completeness, technical_data_quality]
-        values = [max(0.0, min(100.0, float(v))) for v in values]
-        return round(values[0] * 0.27 + values[1] * 0.18 + values[2] * 0.27 + values[3] * 0.18 + values[4] * 0.10, 2)
+    def _coverage(items: list[ScoreComponent]) -> float:
+        return round(100.0 * sum(item.available for item in items) / len(items), 2) if items else 0.0
 
-    def evaluate(self, strategic_scores: Mapping[str, object], tactical_scores: Mapping[str, object], confidence_inputs: Mapping[str, object], strengths: list[str] | None = None, red_flags: list[str] | None = None, contextual: Mapping[str, object] | None = None) -> DecisionResult:
+    def strategic(self, data): return self._weighted(data, STRATEGIC)
+    def tactical(self, data): return self._weighted(data, TACTICAL)
+
+    @staticmethod
+    def confidence(provider_quality: float, freshness: float, consistency: float, completeness: float, technical_data_quality: float = 100.0, coverage: float = 100.0) -> float:
+        values = [max(0.0, min(100.0, float(v))) for v in [provider_quality, freshness, consistency, completeness, technical_data_quality]]
+        base = values[0] * .27 + values[1] * .18 + values[2] * .27 + values[3] * .18 + values[4] * .10
+        return round(base * max(0.0, min(100.0, float(coverage))) / 100.0, 2)
+
+    def evaluate(self, strategic_scores, tactical_scores, confidence_inputs, strengths=None, red_flags=None, contextual=None):
         strategic_total, strategic_items, strategic_warnings = self.strategic(strategic_scores)
         tactical_total, tactical_items, tactical_warnings = self.tactical(tactical_scores)
-        confidence = self.confidence(
-            confidence_inputs.get("provider_quality", 80),
-            confidence_inputs.get("freshness", 80),
-            confidence_inputs.get("consistency", 80),
-            confidence_inputs.get("completeness", 80),
-            confidence_inputs.get("technical_data_quality", 100),
-        )
+        coverage = round((self._coverage(strategic_items) + self._coverage(tactical_items)) / 2.0, 2)
+        base_confidence = self.confidence(confidence_inputs.get("provider_quality", 80), confidence_inputs.get("freshness", 80), confidence_inputs.get("consistency", 80), confidence_inputs.get("completeness", 80), confidence_inputs.get("technical_data_quality", 100), 100)
+        confidence = self.confidence(confidence_inputs.get("provider_quality", 80), confidence_inputs.get("freshness", 80), confidence_inputs.get("consistency", 80), confidence_inputs.get("completeness", 80), confidence_inputs.get("technical_data_quality", 100), coverage)
         context = {}
         for key, value in (contextual or {}).items():
-            score = self._score(value, default=None)
-            if score is not None:
-                context[key] = score
-        flags = list(red_flags or [])
-        flags.extend(strategic_warnings + tactical_warnings)
+            score = self._score(value)
+            if score is not None: context[key] = score
+        flags = list(red_flags or []) + strategic_warnings + tactical_warnings
         for item in strategic_items + tactical_items:
-            if not item.available:
-                flags.append(f"{item.name}: NO DISPONIBLE; excluido del promedio ponderado")
-        return DecisionResult(
-            strategic_score=round(strategic_total, 2) if strategic_total is not None else None,
-            tactical_score=round(tactical_total, 2) if tactical_total is not None else None,
-            strategic_decision=self._decision(strategic_total),
-            tactical_decision=self._decision(tactical_total),
-            confidence=confidence,
-            strategic_breakdown=strategic_items,
-            tactical_breakdown=tactical_items,
-            strengths=list(strengths or []),
-            red_flags=list(dict.fromkeys(flags)),
-            contextual=context,
-        )
+            if not item.available: flags.append(f"{item.name}: NO DISPONIBLE; excluido del promedio ponderado")
+        if coverage < 100: flags.append(f"Cobertura de señales decisorias: {coverage:.1f}%")
+        return DecisionResult(round(strategic_total, 2) if strategic_total is not None else None, round(tactical_total, 2) if tactical_total is not None else None, self._decision(strategic_total), self._decision(tactical_total), confidence, strategic_items, tactical_items, list(dict.fromkeys(flags)), list(strengths or []), context, coverage, base_confidence)
 
     @staticmethod
-    def print_summary(result: DecisionResult) -> None:
-        print("=" * 80)
-        print("DECISION ENGINE V11")
-        print("=" * 80)
-        strategic_score = f"{result.strategic_score:.2f}/100" if result.strategic_score is not None else "N/D"
-        tactical_score = f"{result.tactical_score:.2f}/100" if result.tactical_score is not None else "N/D"
-        print(f"Estratégico (años): {result.strategic_decision} | {strategic_score}")
-        print(f"Táctico (semanas):  {result.tactical_decision} | {tactical_score}")
+    def print_summary(result):
+        print("=" * 80); print("DECISION ENGINE V11"); print("=" * 80)
+        print(f"Estratégico (años): {result.strategic_decision} | {result.strategic_score:.2f}/100")
+        print(f"Táctico (semanas):  {result.tactical_decision} | {result.tactical_score:.2f}/100")
         print(f"Confianza:          {result.confidence:.1f}%")
-        print("\nDESGLOSE ESTRATÉGICO")
-        for item in result.strategic_breakdown:
-            score = f"{item.score:.2f}" if item.score is not None else "N/D"
-            print(f"  {item.name:15s} score={score:>6} peso={item.weight:.1%} aporte={item.weighted:6.2f} {'[NO DISP]' if not item.available else ''}")
-        print("\nDESGLOSE TÁCTICO")
-        for item in result.tactical_breakdown:
-            score = f"{item.score:.2f}" if item.score is not None else "N/D"
-            print(f"  {item.name:15s} score={score:>6} peso={item.weight:.1%} aporte={item.weighted:6.2f} {'[NO DISP]' if not item.available else ''}")
+        print(f"Cobertura señales:  {result.data_coverage:.1f}%")
