@@ -13,6 +13,7 @@ Plataforma modular de análisis de inversiones con decisión separada por horizo
 
 - Python 3.12+
 - Para datos Yahoo: `yfinance`
+- Para macro de producción: `requests` + `python-dotenv`
 
 ## Instalación recomendada desde VSCode / terminal
 
@@ -28,6 +29,26 @@ En PowerShell, si la política de ejecución bloquea la activación del entorno,
 ```powershell
 .venv\Scripts\python.exe -m pip install -e ".[full,test]"
 ```
+
+## Credenciales macroeconómicas
+
+El módulo macro **no guarda claves en el código**. Carga automáticamente un `.env` local mediante `python-dotenv`.
+
+Para un activo mexicano como `FMTY14.MX`, el análisis macro incluye **EUA + México**. Para activos no `.MX`, México no se consulta.
+
+1. Copia `.env.example` a `.env`.
+2. Completa tus credenciales reales:
+
+```dotenv
+FRED_API_KEY=TU_CLAVE_FRED
+BANXICO_TOKEN=TU_TOKEN_BANXICO
+```
+
+También se acepta `BMX_TOKEN` como alias del token de Banxico.
+
+**Nunca subas `.env` al repositorio.** Está excluido por `.gitignore`.
+
+El bloque macro es contextual: no modifica directamente BUY/SELL/HOLD. Se utiliza para describir el régimen de tasas/inflación y el margen de seguridad requerido. FRED proporciona observaciones de series económicas mediante su endpoint de observaciones; Banxico SIE se utiliza para las series mexicanas. citeturn0search0turn1search1
 
 ## Ejecución
 
