@@ -30,8 +30,6 @@ FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 BANXICO_BASE = "https://www.banxico.org.mx/SieAPIRest/service/v1/series"
 
 if load_dotenv is not None:
-    # Safe: .env is explicitly ignored by git. Existing process environment
-    # variables win because override=False is the default.
     load_dotenv()
 
 
@@ -54,9 +52,6 @@ class ProductionMacroModule:
         "real_gdp_yoy": ("GDPC1", "US real GDP"),
         "treasury_10y": ("DGS10", "US 10Y Treasury"),
     }
-    # These are current SIE series already used by the project. Keep them
-    # centralized so the mapping is auditable and easy to replace if Banxico
-    # changes a series identifier.
     BANXICO_SERIES = {
         "policy_rate": ("SF61745", "Banxico target rate"),
         "inflation_yoy": ("SP30578", "Mexico annual inflation"),
@@ -165,14 +160,18 @@ class ProductionMacroModule:
 
     def run(self, context) -> dict[str, Any]:
         symbol = getattr(getattr(context, "asset", None), "symbol", "")
+        fred_configured = self._fred_api_key() is not None
+        banxico_configured = self._banxico_token() is not None
         us: dict[str, Any] = {}
+        errors: list[str] = []
+
         for key, (series_id, title) in self.FRED_SERIES.items():
             units = "pc1" if key in {"inflation_yoy", "real_gdp_yoy"} else "lin"
             try:
                 snap = self._fred(series_id, title, units=units)
             except Exception as exc:
                 snap = MacroSnapshot(series_id, None, None, "fred", title)
-                us.setdefault("errors", []).append(f"{series_id}: {type(exc).__name__}")
+                errors.append(f"FRED {series_id}: {type(exc).__name__}")
             us[key] = snap.value
             us[f"{key}_date"] = snap.date
 
@@ -184,7 +183,7 @@ class ProductionMacroModule:
                     snap = self._banxico(series_id, title)
                 except Exception as exc:
                     snap = MacroSnapshot(series_id, None, None, "banxico", title)
-                    mx.setdefault("errors", []).append(f"{series_id}: {type(exc).__name__}")
+                    errors.append(f"Banxico {series_id}: {type(exc).__name__}")
                 mx[key] = snap.value
                 mx[f"{key}_date"] = snap.date
 
@@ -193,8 +192,21 @@ class ProductionMacroModule:
         if mx is not None:
             mx_regime = self._regime(mx.get("policy_rate"), mx.get("inflation_yoy"), None, None)
 
+        fred_observations = sum(value is not None for key, value in us.items() if not key.endswith("_date") and key != "errors")
+        mexico_observations = 0
+        if mx is not None:
+            mexico_observations = sum(value is not None for key, value in mx.items() if not key.endswith("_date") and key != "errors")
+
+        diagnostics = {
+            "fred_configured": fred_configured,
+            "banxico_configured": banxico_configured if mx is not None else None,
+            "fred_observations": fred_observations,
+            "mexico_observations": mexico_observations,
+            "errors": errors,
+        }
+
         return {
-            "available": bool(us.get("policy_rate") is not None or (mx and mx.get("policy_rate") is not None)),
+            "available": bool(fred_observations or mexico_observations),
             "context_only": True,
             "score": None,
             "required_margin": self._required_margin(us, mx),
@@ -203,5 +215,6 @@ class ProductionMacroModule:
             "mexico": mx,
             "us_regime": us_regime,
             "mexico_regime": mx_regime,
+            "diagnostics": diagnostics,
             "explanation": "Macro es contexto; no vota directamente en BUY/SELL/HOLD.",
         }
