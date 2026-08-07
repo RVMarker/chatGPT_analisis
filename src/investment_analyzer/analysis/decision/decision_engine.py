@@ -119,7 +119,9 @@ class DecisionEngine:
 
         effective_weight_total = sum(item.weight for item in available_items)
         for item in available_items:
-            item.weight = item.weight / effective_weight_total
+            # Round the normalized weight to avoid binary floating-point noise
+            # (e.g. 0.7499999999999999 instead of the exact expected 0.75).
+            item.weight = round(item.weight / effective_weight_total, 12)
         total = sum(item.weighted for item in available_items)
         return total, items, []
 
