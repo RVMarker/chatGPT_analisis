@@ -2,8 +2,8 @@
 
 Uses a transparent FFO-per-share capitalization model. When only public
 financial statements are available, the engine can use an explicitly labelled
-FFO proxy (net income + depreciation/amortization); it never calls that proxy
-AFFO. The assumptions are returned with the result for auditability.
+FFO proxy (net income + depreciation/amortization); it never calls that proxy AFFO.
+The assumptions are returned with the result for auditability.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ class REITValuationResult:
     growth: float
     source_quality: str
     warnings: list[str]
+    valuation_quality: str = "MEDIUM"
 
     def as_dict(self):
         return asdict(self)
@@ -41,7 +42,6 @@ class REITValuationEngine:
     def _score(margin: float | None) -> float | None:
         if margin is None:
             return None
-        # Margin is upside relative to market price.
         if margin >= 0.30:
             return 100.0
         if margin >= 0.20:
@@ -58,6 +58,15 @@ class REITValuationEngine:
             return 25.0
         return 10.0
 
+    @staticmethod
+    def _quality(source_quality: str) -> str:
+        quality = (source_quality or "").upper()
+        if quality in {"FFO_OFFICIAL", "AFFO_OFFICIAL", "AFFO"}:
+            return "HIGH"
+        if quality in {"FFO_PROXY", "FFO_ESTIMATE"}:
+            return "MEDIUM"
+        return "LOW"
+
     def calculate(
         self,
         *,
@@ -70,6 +79,7 @@ class REITValuationEngine:
     ) -> REITValuationResult:
         required_yield = self._rate("required_yield", required_yield)
         growth = self._rate("growth", growth)
+        valuation_quality = self._quality(source_quality)
         if required_yield <= growth:
             raise ValueError("required_yield debe ser mayor que growth")
         if ffo <= 0:
@@ -77,12 +87,14 @@ class REITValuationEngine:
                 False, "FFO_CAPITALIZATION", None, None, None, None,
                 required_yield, growth, source_quality,
                 ["FFO no positivo; no se puede capitalizar de forma robusta"],
+                valuation_quality,
             )
         if shares_outstanding <= 0 or current_price <= 0:
             return REITValuationResult(
                 False, "FFO_CAPITALIZATION", None, None, None, None,
                 required_yield, growth, source_quality,
                 ["Faltan acciones en circulación o precio actual válido"],
+                valuation_quality,
             )
 
         ffo_per_share = float(ffo) / float(shares_outstanding)
@@ -93,6 +105,10 @@ class REITValuationEngine:
             warnings.append(
                 "FFO PROXY: derivado de estados financieros; no sustituye AFFO oficial de la FIBRA"
             )
+        if valuation_quality != "HIGH":
+            warnings.append(
+                f"Calidad de valoración {valuation_quality}: el valor razonable depende de la calidad del FFO disponible"
+            )
         if required_yield - growth < 0.04:
             warnings.append("Valoración sensible: spread entre yield requerido y crecimiento < 4pp")
         if margin < 0:
@@ -101,4 +117,5 @@ class REITValuationEngine:
         return REITValuationResult(
             True, "FFO_CAPITALIZATION", ffo_per_share, fair_value, margin,
             self._score(margin), required_yield, growth, source_quality, warnings,
+            valuation_quality,
         )
