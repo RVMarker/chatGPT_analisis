@@ -119,7 +119,13 @@ def render_decision_report(context) -> str:
         f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
         f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
         f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-        f"  Observaciones : {providers.get('history_length', 'N/D')}", "", "CONTEXTO — NO VOTA DIRECTAMENTE"])
+        f"  Observaciones : {providers.get('history_length', 'N/D')}", "",
+        "SENTIMENT — TRAZABILIDAD",
+        f"  Proveedor     : {metadata.get('sentiment_provider') or 'N/D'} ({metadata.get('sentiment_provider_symbol') or 'N/D'})",
+        f"  Noticias raw  : {metadata.get('sentiment_raw_count', 0)}",
+        f"  Normalizadas  : {metadata.get('sentiment_normalized_count', 0)}",
+        f"  Evidencias    : {len(metadata.get('sentiment_evidence', []) or [])}", "",
+        "CONTEXTO — NO VOTA DIRECTAMENTE"])
     if contextual:
         for key, value in contextual.items(): lines.append(f"  {key:15s} {_fmt(value, 2)}")
     else: lines.append("  N/D")
