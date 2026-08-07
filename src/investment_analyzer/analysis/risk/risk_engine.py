@@ -6,8 +6,9 @@ visible for auditability. Missing components do not become a neutral 50.
 
 For REIT/FIBRA-like capital structures, market leverage can corroborate book
 leverage when current-assets/current-liabilities or EBIT/interest coverage are
-not supplied by a provider. It is an explicitly separate market-based metric,
-not a fabricated liquidity or coverage value.
+not supplied by a provider. Debt/EBITDA is also used when EBITDA is available,
+because it measures debt burden relative to operating capacity rather than
+repeating the debt/equity ratio.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ class RiskResult:
     altman_score: float | None
     altman_classification: str
     debt_to_equity: float | None
+    debt_to_ebitda: float | None
     current_ratio: float | None
     interest_coverage: float | None
     market_leverage: float | None
@@ -62,10 +64,19 @@ class RiskEngine:
         leverage = RiskEngine._ratio(net_debt, market_value_equity)
         if leverage is None:
             return None, None
-        # 0x debt/equity => 100. At 2x or more => 0. Linear interpolation is
-        # deliberately conservative and is not presented as an industry norm.
         score = RiskEngine._bounded(100.0 - leverage * 50.0)
         return leverage, score
+
+    @staticmethod
+    def _debt_ebitda_score(debt_to_ebitda: float | None):
+        """Map debt/EBITDA to a conservative quality score.
+
+        <=1x is treated as strong (100); >=6x as weak (0). The interpolation
+        is a transparent model convention, not an industry threshold claim.
+        """
+        if debt_to_ebitda is None:
+            return None
+        return RiskEngine._bounded(100.0 - ((debt_to_ebitda - 1.0) * 20.0))
 
     def calculate(self, statements, market_value_equity: float | None = None) -> RiskResult:
         bs = statements.balance
@@ -74,6 +85,7 @@ class RiskEngine:
         strengths: list[str] = []
 
         debt_equity = self._ratio(bs.total_liabilities, bs.shareholders_equity)
+        debt_to_ebitda = self._ratio(bs.long_term_debt, inc.ebitda)
         current_ratio = self._ratio(bs.current_assets, bs.current_liabilities)
         interest_coverage = self._ratio(
             inc.ebit,
@@ -81,6 +93,7 @@ class RiskEngine:
         )
 
         balance_score = self._bounded(100 - debt_equity * 40) if debt_equity is not None else None
+        debt_ebitda_score = self._debt_ebitda_score(debt_to_ebitda)
         liquidity_score = self._bounded(50 + (current_ratio - 1) * 35) if current_ratio is not None else None
         coverage_score = self._bounded(interest_coverage * 15) if interest_coverage is not None else None
 
@@ -94,6 +107,11 @@ class RiskEngine:
                 red_flags.append("Deuda/patrimonio elevada")
             elif debt_equity < 0.75:
                 strengths.append("Apalancamiento moderado")
+        if debt_to_ebitda is not None:
+            if debt_to_ebitda > 6:
+                red_flags.append("Deuda/EBITDA elevada")
+            elif debt_to_ebitda <= 2:
+                strengths.append("Deuda/EBITDA contenida")
         if current_ratio is not None:
             if current_ratio < 1:
                 red_flags.append("Liquidez corriente inferior a 1")
@@ -137,11 +155,12 @@ class RiskEngine:
             pass
 
         components = {
-            "balance": (balance_score, 0.25),
+            "balance": (balance_score, 0.20),
+            "debt_ebitda": (debt_ebitda_score, 0.20),
             "liquidity": (liquidity_score, 0.15),
             "coverage": (coverage_score, 0.15),
-            "altman": (self._bounded(altman_score), 0.25),
-            "market_leverage": (market_leverage_score, 0.20),
+            "altman": (self._bounded(altman_score), 0.20),
+            "market_leverage": (market_leverage_score, 0.10),
         }
         available = {name: (score, weight) for name, (score, weight) in components.items() if score is not None}
         unavailable = [name for name, (score, _) in components.items() if score is None]
@@ -161,6 +180,7 @@ class RiskEngine:
             altman_score=altman_score,
             altman_classification=altman_classification,
             debt_to_equity=debt_equity,
+            debt_to_ebitda=debt_to_ebitda,
             current_ratio=current_ratio,
             interest_coverage=interest_coverage,
             market_leverage=market_leverage,
@@ -168,6 +188,7 @@ class RiskEngine:
             strengths=strengths,
             metrics={
                 "debt_to_equity": debt_equity,
+                "debt_to_ebitda": debt_to_ebitda,
                 "current_ratio": current_ratio,
                 "interest_coverage": interest_coverage,
                 "market_leverage": market_leverage,
