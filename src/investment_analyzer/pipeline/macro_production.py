@@ -40,13 +40,10 @@ class ProductionMacroModule:
         "treasury_10y": ("DGS10", "US 10Y Treasury"),
     }
 
-    # FRED/OECD provides a production fallback for Mexico's long-term 10Y yield.
-    # Banxico remains the preferred source for Mexico policy rate, inflation and FX.
     MEXICO_FRED_SERIES = {
         "treasury_10y": ("IRLTLT01MXM156N", "Mexico 10Y government bond yield (OECD/FRED)"),
     }
 
-    # Verified Banxico SIE identifiers.
     BANXICO_SERIES = {
         "policy_rate": ("SF61745", "Banxico target rate"),
         "inflation_yoy": ("SP30578", "Mexico annual inflation"),
@@ -88,7 +85,6 @@ class ProductionMacroModule:
 
     @staticmethod
     def _response_diagnostic(response: Any) -> str | None:
-        """Return a safe, short server diagnostic without leaking credentials."""
         try:
             text = str(getattr(response, "text", "") or "").strip()
         except Exception:  # pragma: no cover - defensive
@@ -120,7 +116,6 @@ class ProductionMacroModule:
         return MacroSnapshot(series_id, value, date, "fred", title)
 
     def _banxico_batch(self) -> dict[str, MacroSnapshot]:
-        """Fetch Mexican macro series in one authenticated SIE request."""
         token = self._banxico_token()
         result = {
             series_id: MacroSnapshot(series_id, None, None, "banxico", title)
@@ -186,6 +181,32 @@ class ProductionMacroModule:
             return 25.0
         return 15.0
 
+    @staticmethod
+    def _cross_country_context(us: dict[str, Any], mx: dict[str, Any] | None) -> dict[str, float | None]:
+        """Compute Mexico-vs-US macro spreads for context only; never a decision vote."""
+        if not mx:
+            return {
+                "policy_rate_spread_mx_us": None,
+                "treasury_10y_spread_mx_us": None,
+                "mexico_real_rate_ex_post": None,
+            }
+
+        def spread(mx_key: str, us_key: str) -> float | None:
+            mx_value, us_value = mx.get(mx_key), us.get(us_key)
+            if isinstance(mx_value, (int, float)) and isinstance(us_value, (int, float)):
+                return float(mx_value) - float(us_value)
+            return None
+
+        real_rate = None
+        if isinstance(mx.get("policy_rate"), (int, float)) and isinstance(mx.get("inflation_yoy"), (int, float)):
+            real_rate = float(mx["policy_rate"]) - float(mx["inflation_yoy"])
+
+        return {
+            "policy_rate_spread_mx_us": spread("policy_rate", "policy_rate"),
+            "treasury_10y_spread_mx_us": spread("treasury_10y", "treasury_10y"),
+            "mexico_real_rate_ex_post": real_rate,
+        }
+
     def run(self, context) -> dict[str, Any]:
         symbol = getattr(getattr(context, "asset", None), "symbol", "")
         fred_configured = self._fred_api_key() is not None
@@ -214,8 +235,6 @@ class ProductionMacroModule:
             for key in self.BANXICO_SERIES:
                 mx[f"{key}_date"] = None
 
-            # Keep Mexico 10Y independent from Banxico authentication. This is
-            # especially important when the Banxico token is expired/invalid.
             for key, (series_id, title) in self.MEXICO_FRED_SERIES.items():
                 try:
                     snap = self._fred(series_id, title, units="lin")
@@ -274,6 +293,7 @@ class ProductionMacroModule:
             "mexico_observations": mexico_observations,
             "errors": errors,
         }
+        cross_country = self._cross_country_context(us, mx)
 
         return {
             "available": bool(fred_observations or mexico_observations),
@@ -283,6 +303,7 @@ class ProductionMacroModule:
             "provider": "fred+banxico" if mx is not None else "fred",
             "us": us,
             "mexico": mx,
+            "cross_country": cross_country,
             "us_regime": us_regime,
             "mexico_regime": mx_regime,
             "diagnostics": diagnostics,
