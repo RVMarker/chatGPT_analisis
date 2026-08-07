@@ -13,6 +13,7 @@ authors = [{name="Nuria Ledezma"}]
 dependencies = [
     "requests>=2.32.3",
     "python-dotenv>=1.0.1",
+    "pydantic>=2.10.5",
 ]
 
 [project.optional-dependencies]
