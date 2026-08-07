@@ -7,6 +7,10 @@ from investment_analyzer.app import build_application
 from investment_analyzer.pipeline.decision_report import render_decision_report
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 
+# Backwards-compatible name retained for integrations that monkeypatch the
+# renderer at the CLI boundary.
+format_decision_report = render_decision_report
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="V11 Investment Analyzer")
@@ -16,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_cli(ticker: str, pipeline: AnalysisPipeline) -> int:
     context = pipeline.run(ticker)
-    print(render_decision_report(context))
+    print(format_decision_report(context))
     return 0
 
 
