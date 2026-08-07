@@ -33,3 +33,18 @@ def test_missing_market_equity_does_not_fake_altman():
     result = RiskEngine().calculate(statements(), market_value_equity=None)
     assert result.altman_score is None
     assert result.altman_classification == "Datos insuficientes"
+
+
+def test_risk_score_requires_corroboration():
+    base = statements()
+    base.balance.current_assets = None
+    base.balance.current_liabilities = None
+    base.income.ebit = None
+    base.income.interest_expense = None
+
+    result = RiskEngine().calculate(base, market_value_equity=None)
+
+    assert result.debt_to_equity == 300 / 700
+    assert result.score is None
+    assert result.unavailable_components == ["liquidity", "coverage", "altman"]
+    assert any("corroboración insuficiente" in flag for flag in result.red_flags)
