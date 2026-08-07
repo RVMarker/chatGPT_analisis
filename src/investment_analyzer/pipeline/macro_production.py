@@ -38,11 +38,13 @@ class ProductionMacroModule:
         "real_gdp_yoy": ("GDPC1", "US real GDP"),
         "treasury_10y": ("DGS10", "US 10Y Treasury"),
     }
+
+    # Verified Banxico identifiers. SF63528 is historical USD/MXN,
+    # not a Mexico 10Y government-yield series, so it is not mislabeled here.
     BANXICO_SERIES = {
         "policy_rate": ("SF61745", "Banxico target rate"),
         "inflation_yoy": ("SP30578", "Mexico annual inflation"),
         "usd_mxn": ("SF43718", "USD/MXN FIX"),
-        "treasury_10y": ("SF63528", "Mexico 10Y government yield"),
     }
 
     def __init__(self, timeout: float = 12.0, session: requests.Session | None = None):
@@ -99,19 +101,17 @@ class ProductionMacroModule:
         return MacroSnapshot(series_id, value, date, "fred", title)
 
     def _banxico(self, series_id: str, title: str) -> MacroSnapshot:
-        """Query Banxico SIE with its documented query-string token.
-
-        The SIE REST examples use ``?token=...``. Keep the Bmx-Token header
-        too for compatibility, but the query parameter is the canonical
-        authentication mechanism for this endpoint.
-        """
+        """Query Banxico SIE using its documented Bmx-Token header."""
         token = self._banxico_token()
         if not token:
             return MacroSnapshot(series_id, None, None, "banxico", title)
         response = self.session.get(
             f"{BANXICO_BASE}/{series_id}/datos/oportuno",
-            params={"token": token},
-            headers={"Bmx-Token": token},
+            headers={
+                "Bmx-Token": token,
+                "Accept": "application/json",
+                "User-Agent": "investment-analyzer-v11",
+            },
             timeout=self.timeout,
         )
         response.raise_for_status()
@@ -194,16 +194,28 @@ class ProductionMacroModule:
                     errors.append(f"Banxico {series_id}: {type(exc).__name__}")
                 mx[key] = snap.value
                 mx[f"{key}_date"] = snap.date
+            # No verified official SIE 10Y series is configured yet.
+            mx["treasury_10y"] = None
+            mx["treasury_10y_date"] = None
 
-        us_regime = self._regime(us.get("policy_rate"), us.get("inflation_yoy"), us.get("real_gdp_yoy"), us.get("unemployment"))
+        us_regime = self._regime(
+            us.get("policy_rate"), us.get("inflation_yoy"),
+            us.get("real_gdp_yoy"), us.get("unemployment"),
+        )
         mx_regime = None
         if mx is not None:
             mx_regime = self._regime(mx.get("policy_rate"), mx.get("inflation_yoy"), None, None)
 
-        fred_observations = sum(value is not None for key, value in us.items() if not key.endswith("_date") and key != "errors")
+        fred_observations = sum(
+            value is not None for key, value in us.items()
+            if not key.endswith("_date") and key != "errors"
+        )
         mexico_observations = 0
         if mx is not None:
-            mexico_observations = sum(value is not None for key, value in mx.items() if not key.endswith("_date") and key != "errors")
+            mexico_observations = sum(
+                value is not None for key, value in mx.items()
+                if not key.endswith("_date") and key != "errors"
+            )
 
         diagnostics = {
             "fred_configured": fred_configured,
