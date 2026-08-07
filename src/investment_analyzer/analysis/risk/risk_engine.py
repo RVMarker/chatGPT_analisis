@@ -3,6 +3,11 @@
 Combines solvency and balance-sheet diagnostics into a normalized 0-100 risk
 quality score. Higher score means better risk quality. Raw diagnostics remain
 visible for auditability. Missing components do not become a neutral 50.
+
+For REIT/FIBRA-like capital structures, market leverage can corroborate book
+leverage when current-assets/current-liabilities or EBIT/interest coverage are
+not supplied by a provider. It is an explicitly separate market-based metric,
+not a fabricated liquidity or coverage value.
 """
 from __future__ import annotations
 
@@ -20,6 +25,7 @@ class RiskResult:
     debt_to_equity: float | None
     current_ratio: float | None
     interest_coverage: float | None
+    market_leverage: float | None
     red_flags: list[str]
     strengths: list[str]
     metrics: dict[str, Any]
@@ -50,6 +56,17 @@ class RiskEngine:
             return None
         return max(0.0, min(100.0, float(value)))
 
+    @staticmethod
+    def _market_leverage_score(net_debt: float | None, market_value_equity: float | None):
+        """Convert net debt / market equity into a transparent 0-100 quality score."""
+        leverage = RiskEngine._ratio(net_debt, market_value_equity)
+        if leverage is None:
+            return None, None
+        # 0x debt/equity => 100. At 2x or more => 0. Linear interpolation is
+        # deliberately conservative and is not presented as an industry norm.
+        score = RiskEngine._bounded(100.0 - leverage * 50.0)
+        return leverage, score
+
     def calculate(self, statements, market_value_equity: float | None = None) -> RiskResult:
         bs = statements.balance
         inc = statements.income
@@ -67,6 +84,11 @@ class RiskEngine:
         liquidity_score = self._bounded(50 + (current_ratio - 1) * 35) if current_ratio is not None else None
         coverage_score = self._bounded(interest_coverage * 15) if interest_coverage is not None else None
 
+        net_debt = None
+        if bs.long_term_debt is not None:
+            net_debt = float(bs.long_term_debt) - float(bs.cash or 0)
+        market_leverage, market_leverage_score = self._market_leverage_score(net_debt, market_value_equity)
+
         if debt_equity is not None:
             if debt_equity > 2:
                 red_flags.append("Deuda/patrimonio elevada")
@@ -82,6 +104,11 @@ class RiskEngine:
                 red_flags.append("Cobertura de intereses inferior a 1x")
             elif interest_coverage >= 5:
                 strengths.append("Cobertura de intereses fuerte")
+        if market_leverage is not None:
+            if market_leverage > 0.50:
+                red_flags.append("Apalancamiento de mercado elevado")
+            elif market_leverage < 0.35:
+                strengths.append("Apalancamiento de mercado moderado")
 
         altman_score = None
         altman_classification = "Datos insuficientes"
@@ -110,10 +137,11 @@ class RiskEngine:
             pass
 
         components = {
-            "balance": (balance_score, 0.30),
-            "liquidity": (liquidity_score, 0.20),
-            "coverage": (coverage_score, 0.20),
-            "altman": (self._bounded(altman_score), 0.30),
+            "balance": (balance_score, 0.25),
+            "liquidity": (liquidity_score, 0.15),
+            "coverage": (coverage_score, 0.15),
+            "altman": (self._bounded(altman_score), 0.25),
+            "market_leverage": (market_leverage_score, 0.20),
         }
         available = {name: (score, weight) for name, (score, weight) in components.items() if score is not None}
         unavailable = [name for name, (score, _) in components.items() if score is None]
@@ -135,9 +163,15 @@ class RiskEngine:
             debt_to_equity=debt_equity,
             current_ratio=current_ratio,
             interest_coverage=interest_coverage,
+            market_leverage=market_leverage,
             red_flags=red_flags,
             strengths=strengths,
-            metrics={"debt_to_equity": debt_equity, "current_ratio": current_ratio, "interest_coverage": interest_coverage},
+            metrics={
+                "debt_to_equity": debt_equity,
+                "current_ratio": current_ratio,
+                "interest_coverage": interest_coverage,
+                "market_leverage": market_leverage,
+            },
             available_components=list(available),
             unavailable_components=unavailable,
         )
