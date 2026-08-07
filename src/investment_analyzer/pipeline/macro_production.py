@@ -8,8 +8,16 @@ from typing import Any
 
 import requests
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 BANXICO_BASE = "https://www.banxico.org.mx/SieAPIRest/service/v1/series"
+
+if load_dotenv is not None:
+    load_dotenv()
 
 
 @dataclass(slots=True)
