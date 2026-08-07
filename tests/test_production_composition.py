@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from investment_analyzer.app import build_application
 from investment_analyzer.pipeline.production_modules import UnavailableModule, YahooNewsModule
 from investment_analyzer.pipeline.comparables_production import ProductionComparablesModule
+from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 
 
 def test_build_application_wires_a_runnable_pipeline_factory():
@@ -11,7 +12,7 @@ def test_build_application_wires_a_runnable_pipeline_factory():
     assert pipeline.providers is manager
     assert pipeline.financial_loader.provider_manager is manager
     assert isinstance(pipeline.modules.comparables, ProductionComparablesModule)
-    assert isinstance(pipeline.modules.macro, UnavailableModule)
+    assert isinstance(pipeline.modules.macro, ProductionMacroModule)
     assert isinstance(pipeline.modules.sentiment, YahooNewsModule)
     assert registry is not None
 
