@@ -18,7 +18,7 @@ class Loader:
     def load(self, symbol):
         assert symbol == "FMTY14.MX"
         return FinancialSnapshot(
-            price=PriceData(symbol="FMTY14.MX", price=100),
+            price=PriceData(symbol="FMTY14.MX", current=100),
             financials=FinancialStatements(
                 balance=BalanceSheet(), income=IncomeStatement(), cashflow=CashFlow(), fiscal_date="2026-06-30"
             ),
@@ -31,7 +31,7 @@ class Loader:
 class FinancialAdapter:
     def run(self, context):
         context.fundamentals = {"score": 70}
-        context.valuation = {"score": 65}
+        context.valuation = {"score": 65, "available": True}
         context.risk = {"score": 75}
         return context
 
