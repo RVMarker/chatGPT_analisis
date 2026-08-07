@@ -50,19 +50,13 @@ def _qualified_verdict(verdict: str | None, sufficient: bool | None) -> str:
 
 def render_decision_report(context) -> str:
     decision = context.decision
-    strategic_verdict = _get(
-        decision, "strategic_decision", "strategic_verdict", default=None
-    )
-    tactical_verdict = _get(
-        decision, "tactical_decision", "tactical_verdict", default=None
-    )
+    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None)
+    tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default=None)
     strategic_score = _get(decision, "strategic_score", default=None)
     tactical_score = _get(decision, "tactical_score", default=None)
     if strategic_verdict is None:
         strategic = _get(decision, "strategic", default={}) or {}
-        strategic_verdict = _get(
-            strategic, "verdict", "decision", default="N/D"
-        )
+        strategic_verdict = _get(strategic, "verdict", "decision", default="N/D")
         strategic_score = _get(strategic, "score", default=strategic_score)
     if tactical_verdict is None:
         tactical = _get(decision, "tactical", default={}) or {}
@@ -90,6 +84,13 @@ def render_decision_report(context) -> str:
     macro = getattr(context, "macro", {}) or {}
     financial_meta = metadata.get("financial_integration", {}) or {}
 
+    valuation_model = valuation.get("model") or valuation.get("valuation_model") or "N/D"
+    is_reit_valuation = valuation_model == "FFO_CAPITALIZATION"
+    fair_value_label = "FFO fair value/share" if is_reit_valuation else "Fair value/share"
+    margin_label = "FFO margin of safety" if is_reit_valuation else "Margin of safety"
+    ffo_proxy = valuation.get("ffo_proxy")
+    source_quality = valuation.get("source_quality")
+
     lines = [
         "=" * 72,
         "V11 — INFORME DE DECISIÓN DE INVERSIÓN",
@@ -115,57 +116,54 @@ def render_decision_report(context) -> str:
     lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown))
     lines.append("")
     lines.extend(_breakdown_lines("DESGLOSE TÁCTICO", tactical_breakdown))
-    lines.extend(
-        [
-            "",
-            "COBERTURA FINANCIERA",
-            f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}",
-            f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}",
-            f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}",
-            f"  DCF fair value/share : {_fmt(valuation.get('fair_value_per_share'), 2)}",
-            (
-                f"  DCF margin of safety : {_fmt(valuation.get('margin_of_safety'), 1)}%"
-                if valuation.get("margin_of_safety") is not None
-                else "  DCF margin of safety : N/D"
-            ),
-            f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
-            f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
-            f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}",
-            "",
-            "DATOS UTILIZADOS",
-            f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
-            f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
-            f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-            f"  Observaciones : {providers.get('history_length', 'N/D')}",
-            "",
-            "CONTEXTO — NO VOTA DIRECTAMENTE",
-        ]
-    )
+    lines.extend([
+        "",
+        "COBERTURA FINANCIERA",
+        f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}",
+        f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}",
+        f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}",
+        f"  Modelo valoración : {valuation_model}",
+    ])
+    if is_reit_valuation:
+        lines.append(f"  FFO proxy/share     : {_fmt(ffo_proxy / valuation.get('shares_outstanding'), 4) if ffo_proxy is not None and valuation.get('shares_outstanding') else 'N/D'}")
+        if source_quality:
+            lines.append(f"  Calidad FFO         : {source_quality}")
+    lines.extend([
+        f"  {fair_value_label:<22}: {_fmt(valuation.get('fair_value_per_share'), 2)}",
+        f"  {margin_label:<22}: {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else f"  {margin_label:<22}: N/D",
+        f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
+        f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
+        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}",
+        "",
+        "DATOS UTILIZADOS",
+        f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
+        f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
+        f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
+        f"  Observaciones : {providers.get('history_length', 'N/D')}",
+        "",
+        "CONTEXTO — NO VOTA DIRECTAMENTE",
+    ])
     if contextual:
         for key, value in contextual.items():
             lines.append(f"  {key:15s} {_fmt(value, 2)}")
     else:
         lines.append("  N/D")
-    lines.extend(
-        [
-            "",
-            "COMPARABLES — CONTEXTO",
-            f"  P/E activo       : {_fmt(comparables.get('pe'), 2)}",
-            f"  P/E mediana peers: {_fmt(comparables.get('peer_pe_median'), 2)}",
-            f"  P/E prima/descto : {_fmt(comparables.get('pe_premium_discount') * 100 if comparables.get('pe_premium_discount') is not None else None, 1)}%",
-            f"  EV/EBITDA activo : {_fmt(comparables.get('ev_ebitda'), 2)}",
-            f"  EV/EBITDA peers  : {_fmt(comparables.get('peer_ev_ebitda_median'), 2)}",
-            f"  EV/EBITDA prima  : {_fmt(comparables.get('ev_ebitda_premium_discount') * 100 if comparables.get('ev_ebitda_premium_discount') is not None else None, 1)}%",
-            f"  Lectura          : {comparables.get('context', 'N/D')}",
-            "",
-            "MACRO — CONTEXTO",
-        ]
-    )
+    lines.extend([
+        "",
+        "COMPARABLES — CONTEXTO",
+        f"  P/E activo       : {_fmt(comparables.get('pe'), 2)}",
+        f"  P/E mediana peers: {_fmt(comparables.get('peer_pe_median'), 2)}",
+        f"  P/E prima/descto : {_fmt(comparables.get('pe_premium_discount') * 100 if comparables.get('pe_premium_discount') is not None else None, 1)}%",
+        f"  EV/EBITDA activo : {_fmt(comparables.get('ev_ebitda'), 2)}",
+        f"  EV/EBITDA peers  : {_fmt(comparables.get('peer_ev_ebitda_median'), 2)}",
+        f"  EV/EBITDA prima  : {_fmt(comparables.get('ev_ebitda_premium_discount') * 100 if comparables.get('ev_ebitda_premium_discount') is not None else None, 1)}%",
+        f"  Lectura          : {comparables.get('context', 'N/D')}",
+        "",
+        "MACRO — CONTEXTO",
+    ])
     if isinstance(macro, dict) and macro.get("available"):
         lines.append(f"  Score contextual: {_fmt(macro.get('score'), 1)}")
-        lines.append(
-            f"  Margen seguridad requerido: {_fmt(macro.get('required_margin'), 1)}%"
-        )
+        lines.append(f"  Margen seguridad requerido: {_fmt(macro.get('required_margin'), 1)}%")
         lines.append(f"  {macro.get('explanation', '')}")
     else:
         lines.append("  N/D — fuente macroeconómica de producción aún no conectada")
