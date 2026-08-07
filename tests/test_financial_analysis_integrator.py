@@ -28,12 +28,12 @@ def test_integrator_runs_real_engines_together():
     assert result.fundamental["metrics"]["current_ratio"] == 2
 
 
-def test_integrator_requires_fcf():
+def test_integrator_marks_missing_fcf_as_unavailable():
     statements, price = snapshot()
     statements.cashflow.free_cash_flow = None
-    try:
-        FinancialAnalysisIntegrator().run(statements, price, growth_rates=[.05], wacc=.10, terminal_growth=.03)
-    except ValueError as exc:
-        assert "free_cash_flow" in str(exc)
-    else:
-        raise AssertionError("Expected missing FCF to fail")
+    result = FinancialAnalysisIntegrator().run(
+        statements, price, growth_rates=[.05], wacc=.10, terminal_growth=.03
+    )
+    assert result.valuation["available"] is False
+    assert result.valuation["score"] is None
+    assert any("free_cash_flow" in warning for warning in result.valuation["warnings"])
