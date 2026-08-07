@@ -28,7 +28,12 @@ class FinancialModuleAdapter:
         if context.price is None:
             raise ValueError("AnalysisContext no contiene price normalizado")
 
-        integrated = self.integrator.run(context.financials, context.price)
+        asset_type = getattr(context.asset, "asset_type", None)
+        integrated = self.integrator.run(
+            context.financials,
+            context.price,
+            asset_type=asset_type,
+        )
 
         context.fundamentals = _as_mapping(integrated.fundamental)
         context.risk = _as_mapping(integrated.risk)
@@ -45,6 +50,9 @@ class FinancialModuleAdapter:
         context.metadata.setdefault("financial_integration", {})
         context.metadata["financial_integration"].update(
             {
+                "asset_type": asset_type,
+                "valuation_model": context.valuation.get("model"),
+                "valuation_source_quality": context.valuation.get("source_quality"),
                 "fundamental_available": context.fundamentals.get("score") is not None,
                 "valuation_available": context.valuation.get("available", False),
                 "risk_available": context.risk.get("score") is not None,
