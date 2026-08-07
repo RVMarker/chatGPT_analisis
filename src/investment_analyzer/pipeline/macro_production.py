@@ -1,18 +1,4 @@
-"""Production macroeconomic context for V11.
-
-Macro is contextual only: it never contributes directly to BUY/SELL/HOLD
-scores. US data comes from FRED; Mexican data is added automatically for
-Mexican assets (.MX) using Banco de Mexico SIE.
-
-Credentials are read from environment variables. A local ``.env`` file is
-loaded automatically when ``python-dotenv`` is installed (it is part of the
-recommended ``[full]`` installation):
-    FRED_API_KEY
-    BANXICO_TOKEN
-
-``BMX_TOKEN`` is accepted as a backwards-compatible alias for Banxico.
-Real credentials must never be committed to the repository.
-"""
+"""Production macroeconomic context for V11."""
 from __future__ import annotations
 
 import os
@@ -23,7 +9,7 @@ import requests
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - only relevant for minimal installs
+except ImportError:  # pragma: no cover
     load_dotenv = None
 
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
@@ -85,7 +71,12 @@ class ProductionMacroModule:
 
     @staticmethod
     def _banxico_token() -> str | None:
-        return os.getenv("BANXICO_TOKEN") or os.getenv("BMX_TOKEN") or os.getenv("BANXICO_API_KEY")
+        return (
+            os.getenv("BANXICO_TOKEN")
+            or os.getenv("BANXICO_KEY")
+            or os.getenv("BMX_TOKEN")
+            or os.getenv("BANXICO_API_KEY")
+        )
 
     def _fred(self, series_id: str, title: str, units: str = "lin") -> MacroSnapshot:
         api_key = self._fred_api_key()
@@ -108,11 +99,18 @@ class ProductionMacroModule:
         return MacroSnapshot(series_id, value, date, "fred", title)
 
     def _banxico(self, series_id: str, title: str) -> MacroSnapshot:
+        """Query Banxico SIE with its documented query-string token.
+
+        The SIE REST examples use ``?token=...``. Keep the Bmx-Token header
+        too for compatibility, but the query parameter is the canonical
+        authentication mechanism for this endpoint.
+        """
         token = self._banxico_token()
         if not token:
             return MacroSnapshot(series_id, None, None, "banxico", title)
         response = self.session.get(
             f"{BANXICO_BASE}/{series_id}/datos/oportuno",
+            params={"token": token},
             headers={"Bmx-Token": token},
             timeout=self.timeout,
         )
@@ -169,6 +167,11 @@ class ProductionMacroModule:
             units = "pc1" if key in {"inflation_yoy", "real_gdp_yoy"} else "lin"
             try:
                 snap = self._fred(series_id, title, units=units)
+            except requests.HTTPError as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                suffix = f" HTTP {status}" if status else ""
+                snap = MacroSnapshot(series_id, None, None, "fred", title)
+                errors.append(f"FRED {series_id}: HTTPError{suffix}")
             except Exception as exc:
                 snap = MacroSnapshot(series_id, None, None, "fred", title)
                 errors.append(f"FRED {series_id}: {type(exc).__name__}")
@@ -181,6 +184,11 @@ class ProductionMacroModule:
             for key, (series_id, title) in self.BANXICO_SERIES.items():
                 try:
                     snap = self._banxico(series_id, title)
+                except requests.HTTPError as exc:
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    suffix = f" HTTP {status}" if status else ""
+                    snap = MacroSnapshot(series_id, None, None, "banxico", title)
+                    errors.append(f"Banxico {series_id}: HTTPError{suffix}")
                 except Exception as exc:
                     snap = MacroSnapshot(series_id, None, None, "banxico", title)
                     errors.append(f"Banxico {series_id}: {type(exc).__name__}")
