@@ -7,6 +7,7 @@ verdict. Unavailable evidence is not silently converted to a neutral 50.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Mapping
 
 from .decision_weights import STRATEGIC, TACTICAL, validate_weights
@@ -92,6 +93,17 @@ class DecisionEngine:
         except (TypeError, ValueError):
             return default
 
+    @staticmethod
+    def _normalize_weight(weight: float, total: float) -> float:
+        """Normalize with decimal arithmetic to avoid binary float artifacts.
+
+        Converting the already validated float weights through ``str`` keeps
+        their declared decimal meaning (e.g. 0.60 / 0.80 = exactly 0.75 as a
+        float) while still returning the public API's float type. This avoids
+        artifacts such as 0.7499999999999999 without hard-coding any weight.
+        """
+        return float(Decimal(str(weight)) / Decimal(str(total)))
+
     def _weighted(self, data: Mapping[str, object], weights: Mapping[str, float]):
         items: list[ScoreComponent] = []
         for key, weight in weights.items():
@@ -119,9 +131,7 @@ class DecisionEngine:
 
         effective_weight_total = sum(item.weight for item in available_items)
         for item in available_items:
-            # Round the normalized weight to avoid binary floating-point noise
-            # (e.g. 0.7499999999999999 instead of the exact expected 0.75).
-            item.weight = round(item.weight / effective_weight_total, 12)
+            item.weight = self._normalize_weight(item.weight, effective_weight_total)
         total = sum(item.weighted for item in available_items)
         return total, items, []
 
