@@ -4,9 +4,14 @@ Macro is contextual only: it never contributes directly to BUY/SELL/HOLD
 scores. US data comes from FRED; Mexican data is added automatically for
 Mexican assets (.MX) using Banco de Mexico SIE.
 
-Credentials are read only from environment variables:
+Credentials are read from environment variables. A local ``.env`` file is
+loaded automatically when ``python-dotenv`` is installed (it is part of the
+recommended ``[full]`` installation):
     FRED_API_KEY
     BANXICO_TOKEN
+
+``BMX_TOKEN`` is accepted as a backwards-compatible alias for Banxico.
+Real credentials must never be committed to the repository.
 """
 from __future__ import annotations
 
@@ -16,8 +21,18 @@ from typing import Any
 
 import requests
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - only relevant for minimal installs
+    load_dotenv = None
+
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 BANXICO_BASE = "https://www.banxico.org.mx/SieAPIRest/service/v1/series"
+
+if load_dotenv is not None:
+    # Safe: .env is explicitly ignored by git. Existing process environment
+    # variables win because override=False is the default.
+    load_dotenv()
 
 
 @dataclass(slots=True)
@@ -39,6 +54,9 @@ class ProductionMacroModule:
         "real_gdp_yoy": ("GDPC1", "US real GDP"),
         "treasury_10y": ("DGS10", "US 10Y Treasury"),
     }
+    # These are current SIE series already used by the project. Keep them
+    # centralized so the mapping is auditable and easy to replace if Banxico
+    # changes a series identifier.
     BANXICO_SERIES = {
         "policy_rate": ("SF61745", "Banxico target rate"),
         "inflation_yoy": ("SP30578", "Mexico annual inflation"),
@@ -66,8 +84,16 @@ class ProductionMacroModule:
                 continue
         return None, None
 
+    @staticmethod
+    def _fred_api_key() -> str | None:
+        return os.getenv("FRED_API_KEY") or os.getenv("FRED_KEY")
+
+    @staticmethod
+    def _banxico_token() -> str | None:
+        return os.getenv("BANXICO_TOKEN") or os.getenv("BMX_TOKEN") or os.getenv("BANXICO_API_KEY")
+
     def _fred(self, series_id: str, title: str, units: str = "lin") -> MacroSnapshot:
-        api_key = os.getenv("FRED_API_KEY")
+        api_key = self._fred_api_key()
         if not api_key:
             return MacroSnapshot(series_id, None, None, "fred", title)
         response = self.session.get(
@@ -87,7 +113,7 @@ class ProductionMacroModule:
         return MacroSnapshot(series_id, value, date, "fred", title)
 
     def _banxico(self, series_id: str, title: str) -> MacroSnapshot:
-        token = os.getenv("BANXICO_TOKEN")
+        token = self._banxico_token()
         if not token:
             return MacroSnapshot(series_id, None, None, "banxico", title)
         response = self.session.get(
