@@ -5,12 +5,7 @@ from investment_analyzer.analysis.decision.decision_weights import STRATEGIC, TA
 
 
 def _confidence(value=100):
-    return {
-        "provider_quality": value,
-        "freshness": value,
-        "consistency": value,
-        "completeness": value,
-    }
+    return {"provider_quality": value, "freshness": value, "consistency": value, "completeness": value}
 
 
 def _evaluate(score):
@@ -40,12 +35,8 @@ def test_macro_and_comparables_do_not_vote():
     engine = DecisionEngine()
     strategic = {"fundamental": 70, "valuation": 70, "risk": 70}
     tactical = {"technical": 70, "sentiment": 70, "smart_money": 70}
-    low_context = engine.evaluate(
-        strategic, tactical, _confidence(), contextual={"comparables": 0, "macro": 0}
-    )
-    high_context = engine.evaluate(
-        strategic, tactical, _confidence(), contextual={"comparables": 100, "macro": 100}
-    )
+    low_context = engine.evaluate(strategic, tactical, _confidence(), contextual={"comparables": 0, "macro": 0})
+    high_context = engine.evaluate(strategic, tactical, _confidence(), contextual={"comparables": 100, "macro": 100})
     assert low_context.strategic_score == high_context.strategic_score == 70
     assert low_context.tactical_score == high_context.tactical_score == 70
 
@@ -72,18 +63,9 @@ def test_breakdown_is_numeric_and_transparent():
 
 
 def test_exact_decision_thresholds_are_stable():
-    cases = [
-        (100.0, "COMPRAR"),
-        (80.0, "COMPRAR"),
-        (79.99, "ACUMULAR"),
-        (70.0, "ACUMULAR"),
-        (69.99, "MANTENER"),
-        (50.0, "MANTENER"),
-        (49.99, "REDUCIR"),
-        (35.0, "REDUCIR"),
-        (34.99, "VENDER"),
-        (0.0, "VENDER"),
-    ]
+    cases = [(100.0, "COMPRAR"), (80.0, "COMPRAR"), (79.99, "ACUMULAR"), (70.0, "ACUMULAR"),
+             (69.99, "MANTENER"), (50.0, "MANTENER"), (49.99, "REDUCIR"), (35.0, "REDUCIR"),
+             (34.99, "VENDER"), (0.0, "VENDER")]
     for score, expected in cases:
         result = _evaluate(score)
         assert result.strategic_score == score
@@ -99,10 +81,10 @@ def test_missing_components_are_excluded_and_weights_renormalized():
         tactical_scores={"technical": 100, "sentiment": None, "smart_money": 0},
         confidence_inputs=_confidence(),
     )
-    assert result.strategic_score == 50
-    assert result.tactical_score == 50
+    assert result.strategic_score == 66.67
+    assert result.tactical_score == 75.0
     assert result.strategic_decision == "MANTENER"
-    assert result.tactical_decision == "MANTENER"
+    assert result.tactical_decision == "ACUMULAR"
     assert result.strategic_breakdown[0].weight == 2 / 3
     assert result.strategic_breakdown[1].available is False
     assert result.tactical_breakdown[0].weight == 0.75
