@@ -156,6 +156,10 @@ class YahooFinanceAdapter:
             capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
             free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
             dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
+            # yfinance's Ticker.cashflow endpoint is the annual cash-flow
+            # statement. Mark that explicitly so payout cannot silently mix
+            # an annual distribution with quarterly/monthly FFO.
+            dividends_paid_period="annual" if cashflow is not None and not getattr(cashflow, "empty", True) else None,
             share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
             depreciation_amortization=depreciation,
             property_gain_loss=property_gain,
