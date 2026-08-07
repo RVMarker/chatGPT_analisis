@@ -9,6 +9,7 @@ from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoad
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 from investment_analyzer.pipeline.production_modules import UnavailableModule, YahooNewsModule
+from investment_analyzer.pipeline.comparables_production import ProductionComparablesModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
@@ -27,21 +28,12 @@ class ModuleBundle:
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
-    """Build the production stack used by the CLI.
-
-    Modules without a production data source return explicit N/D payloads;
-    they never abort the complete analysis or fabricate a neutral score.
-    """
-    registry, manager = build_provider_stack(
-        yahoo_provider=yahoo_provider,
-        fmp_provider=fmp_provider,
-        symbol_mappings=symbol_mappings,
-    )
+    """Build the production stack used by the CLI."""
+    registry, manager = build_provider_stack(yahoo_provider=yahoo_provider, fmp_provider=fmp_provider, symbol_mappings=symbol_mappings)
     data_loader = FinancialDataLoader(provider_manager=manager)
-
     modules = ModuleBundle(
         technical=TechnicalModule(),
-        comparables=UnavailableModule("comparables"),
+        comparables=ProductionComparablesModule(manager),
         sentiment=YahooNewsModule(manager),
         macro=UnavailableModule("macro"),
         porter=UnavailableModule("porter"),
@@ -49,15 +41,7 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
         dow=UnavailableModule("dow"),
         backtest=UnavailableModule("backtest"),
     )
-
-    pipeline = AnalysisPipeline(
-        providers=manager,
-        modules=modules,
-        financial_adapter=FinancialModuleAdapter(),
-        financial_loader=data_loader,
-        asset_loader=AssetLoader(),
-        decision_module=DecisionModule(),
-    )
+    pipeline = AnalysisPipeline(providers=manager, modules=modules, financial_adapter=FinancialModuleAdapter(), financial_loader=data_loader, asset_loader=AssetLoader(), decision_module=DecisionModule())
     return pipeline, manager, registry
 
 
