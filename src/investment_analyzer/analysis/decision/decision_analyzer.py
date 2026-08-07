@@ -39,7 +39,6 @@ class DecisionAnalyzer:
             strategic_scores={
                 "fundamental": fundamental_score,
                 "valuation": dcf_score,
-                # Contextual only: intentionally ignored by DecisionEngine.
                 "comparables": comparables_score,
                 "macro": macro_score,
                 "risk": risk_score,
@@ -48,7 +47,6 @@ class DecisionAnalyzer:
                 "technical": technical_score,
                 "sentiment": sentiment_score,
                 "smart_money": smart_money_score,
-                # Contextual only: intentionally ignored by DecisionEngine.
                 "macro": macro_score,
             },
             confidence_inputs={
@@ -95,7 +93,6 @@ class DecisionAnalyzer:
         sentiment = _mapping(context.sentiment)
         asset = context.asset
 
-        # Prefer the explicit DCF result if valuation and DCF are both present.
         valuation_source = dcf if _has_score(dcf) else valuation
         return self.build(
             fundamental_score=_score(fundamentals),
@@ -110,8 +107,8 @@ class DecisionAnalyzer:
             freshness=_value(asset, "data_freshness", 80.0),
             consistency=_value(asset, "provider_consistency", 80.0),
             completeness=_value(asset, "completeness", 80.0),
-            strengths=_merge_lists(fundamentals, risk, "strengths"),
-            red_flags=_merge_lists(fundamentals, risk, "red_flags"),
+            strengths=_merge_lists(fundamentals, risk, key="strengths"),
+            red_flags=_merge_lists(fundamentals, risk, key="red_flags"),
             counter_thesis=_list(risk, "counter_thesis"),
         )
 
