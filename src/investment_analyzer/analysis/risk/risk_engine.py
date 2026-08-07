@@ -58,7 +58,10 @@ class RiskEngine:
 
         debt_equity = self._ratio(bs.total_liabilities, bs.shareholders_equity)
         current_ratio = self._ratio(bs.current_assets, bs.current_liabilities)
-        interest_coverage = self._ratio(inc.ebit, abs(inc.interest_expense))
+        interest_coverage = self._ratio(
+            inc.ebit,
+            abs(inc.interest_expense) if inc.interest_expense is not None else None,
+        )
 
         balance_score = self._bounded(100 - debt_equity * 40) if debt_equity is not None else None
         liquidity_score = self._bounded(50 + (current_ratio - 1) * 35) if current_ratio is not None else None
@@ -115,9 +118,6 @@ class RiskEngine:
         available = {name: (score, weight) for name, (score, weight) in components.items() if score is not None}
         unavailable = [name for name, (score, _) in components.items() if score is None]
 
-        # A single balance-sheet ratio is not enough evidence for a numeric
-        # risk score. In particular, an extreme D/E can be legitimate in some
-        # capital structures and must not become a falsely precise 0/100.
         if len(available) < self.MIN_CORROBORATING_COMPONENTS:
             score = None
             red_flags.append(
