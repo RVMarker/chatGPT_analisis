@@ -61,27 +61,22 @@ class YahooFinanceAdapter:
         return None
 
     def price_history(self, symbol: str, period: str = "2y", interval: str = "1d") -> PriceHistory:
-        """Return cleaned historical OHLCV needed by technical analysis."""
         ticker = self._ticker(symbol)
         frame = ticker.history(period=period, interval=interval, auto_adjust=False)
         if frame is None or getattr(frame, "empty", True):
             raise ValueError(f"Yahoo no devolvió histórico para {symbol}")
-
         required = ("Open", "High", "Low", "Close", "Volume")
         missing = [column for column in required if column not in frame.columns]
         if missing:
             raise ValueError(f"Yahoo histórico incompleto para {symbol}: faltan {', '.join(missing)}")
-
         frame = frame.dropna(subset=["Close"]).copy()
         return PriceHistory(
-            symbol=symbol.upper(),
-            dates=list(frame.index),
+            symbol=symbol.upper(), dates=list(frame.index),
             open=[float(x) for x in frame["Open"].fillna(frame["Close"]).tolist()],
             high=[float(x) for x in frame["High"].fillna(frame["Close"]).tolist()],
             low=[float(x) for x in frame["Low"].fillna(frame["Close"]).tolist()],
             close=[float(x) for x in frame["Close"].tolist()],
-            volume=[float(x) for x in frame["Volume"].fillna(0).tolist()],
-            interval=interval,
+            volume=[float(x) for x in frame["Volume"].fillna(0).tolist()], interval=interval,
         )
 
     def price(self, symbol: str) -> PriceData:
@@ -103,8 +98,8 @@ class YahooFinanceAdapter:
             low=self._value(info, "day_low", "dayLow"),
             volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
             market_cap=self._value(info, "market_cap", "marketCap"),
-            shares_outstanding=self._value(info, "shares"),
-            beta=None, currency=self._value(info, "currency", default="USD") or "USD",
+            shares_outstanding=self._value(info, "shares"), beta=None,
+            currency=self._value(info, "currency", default="USD") or "USD",
             timestamp=datetime.now(timezone.utc),
         )
 
@@ -138,12 +133,33 @@ class YahooFinanceAdapter:
             eps=self._latest_statement_value(income, "Diluted EPS", "Basic EPS"),
             interest_expense=self._latest_statement_value(income, "Interest Expense Non Operating", "Interest Expense"),
         )
+        depreciation = self._latest_statement_value(
+            cashflow,
+            "Depreciation And Amortization",
+            "Depreciation",
+            "Depreciation Amortization Depletion",
+        )
+        property_gain = self._latest_statement_value(
+            cashflow,
+            "Gain Loss On Sale Of Assets",
+            "Gain Loss On Sale Of Investments",
+        )
+        net_income = inc.net_income
+        ffo_proxy = None
+        if net_income is not None and depreciation is not None:
+            # Conservative proxy: no gain-on-sale adjustment unless Yahoo supplies it.
+            ffo_proxy = net_income + depreciation
+            if property_gain is not None:
+                ffo_proxy -= property_gain
         cf = CashFlow(
             operating_cash_flow=self._latest_statement_value(cashflow, "Operating Cash Flow", "Total Cash From Operating Activities"),
             capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
             free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
             dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
             share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
+            depreciation_amortization=depreciation,
+            property_gain_loss=property_gain,
+            ffo_proxy=ffo_proxy,
         )
         if cf.free_cash_flow is None and cf.operating_cash_flow is not None and cf.capex is not None:
             cf.free_cash_flow = cf.operating_cash_flow + cf.capex
