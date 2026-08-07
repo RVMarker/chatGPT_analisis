@@ -45,6 +45,37 @@ def _qualified_verdict(verdict: str | None, sufficient: bool | None) -> str:
     return verdict
 
 
+def _macro_lines(macro: dict[str, Any]) -> list[str]:
+    lines = ["MACRO — CONTEXTO (NO VOTA DIRECTAMENTE)"]
+    if not isinstance(macro, dict) or not macro.get("available"):
+        lines.append("  N/D — FRED/Banxico sin datos disponibles o sin credenciales configuradas")
+        return lines
+
+    lines.extend([
+        f"  Proveedores       : {_fmt(macro.get('provider'), 0)}",
+        f"  Margen requerido  : {_fmt(macro.get('required_margin'), 1)}%",
+        f"  EUA régimen       : {_fmt(macro.get('us_regime'), 0)}",
+        f"  EUA Fed funds    : {_fmt((macro.get('us') or {}).get('policy_rate'), 2)}%",
+        f"  EUA inflación YoY: {_fmt((macro.get('us') or {}).get('inflation_yoy'), 2)}%",
+        f"  EUA desempleo     : {_fmt((macro.get('us') or {}).get('unemployment'), 2)}%",
+        f"  EUA PIB real YoY : {_fmt((macro.get('us') or {}).get('real_gdp_yoy'), 2)}%",
+        f"  EUA Treasury 10Y : {_fmt((macro.get('us') or {}).get('treasury_10y'), 2)}%",
+    ])
+    mx = macro.get("mexico")
+    if mx is not None:
+        lines.extend([
+            "  MÉXICO régimen   : " + _fmt(macro.get("mexico_regime"), 0),
+            f"  MÉXICO Banxico   : {_fmt(mx.get('policy_rate'), 2)}%",
+            f"  MÉXICO inflación  : {_fmt(mx.get('inflation_yoy'), 2)}%",
+            f"  MÉXICO USD/MXN   : {_fmt(mx.get('usd_mxn'), 4)}",
+            f"  MÉXICO Bono 10Y  : {_fmt(mx.get('treasury_10y'), 2)}%",
+        ])
+    else:
+        lines.append("  México            : No aplica; activo no identificado como .MX")
+    lines.append("  Lectura           : " + _fmt(macro.get("explanation"), 0))
+    return lines
+
+
 def render_decision_report(context) -> str:
     decision = context.decision
     strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None)
@@ -136,12 +167,8 @@ def render_decision_report(context) -> str:
         f"  EV/EBITDA activo : {_fmt(comparables.get('ev_ebitda'), 2)}",
         f"  EV/EBITDA peers  : {_fmt(comparables.get('peer_ev_ebitda_median'), 2)}",
         f"  EV/EBITDA prima  : {_fmt(comparables.get('ev_ebitda_premium_discount') * 100 if comparables.get('ev_ebitda_premium_discount') is not None else None, 1)}%",
-        f"  Lectura          : {comparables.get('context', 'N/D')}", "", "MACRO — CONTEXTO"])
-    if isinstance(macro, dict) and macro.get("available"):
-        lines.append(f"  Score contextual: {_fmt(macro.get('score'), 1)}")
-        lines.append(f"  Margen seguridad requerido: {_fmt(macro.get('required_margin'), 1)}%")
-        lines.append(f"  {macro.get('explanation', '')}")
-    else: lines.append("  N/D — fuente macroeconómica de producción aún no conectada")
+        f"  Lectura          : {comparables.get('context', 'N/D')}", ""])
+    lines.extend(_macro_lines(macro))
     if strengths: lines.extend(["", "FORTALEZAS", *[f"  + {item}" for item in strengths]])
     if red_flags: lines.extend(["", "RED FLAGS", *[f"  - {item}" for item in red_flags]])
     lines.append("=" * 72)
