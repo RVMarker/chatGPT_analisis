@@ -33,6 +33,8 @@ class RiskResult:
 class RiskEngine:
     """Produce an auditable risk score from normalized financial statements."""
 
+    MIN_CORROBORATING_COMPONENTS = 2
+
     @staticmethod
     def _ratio(a, b):
         if a is None or b in (None, 0):
@@ -112,13 +114,19 @@ class RiskEngine:
         }
         available = {name: (score, weight) for name, (score, weight) in components.items() if score is not None}
         unavailable = [name for name, (score, _) in components.items() if score is None]
-        if available:
+
+        # A single balance-sheet ratio is not enough evidence for a numeric
+        # risk score. In particular, an extreme D/E can be legitimate in some
+        # capital structures and must not become a falsely precise 0/100.
+        if len(available) < self.MIN_CORROBORATING_COMPONENTS:
+            score = None
+            red_flags.append(
+                f"Riesgo: corroboración insuficiente ({len(available)}/{len(components)} componentes); score N/D"
+            )
+        else:
             total_weight = sum(weight for _, weight in available.values())
             score = sum(score_value * (weight / total_weight) for score_value, weight in available.values())
             score = round(score, 2)
-        else:
-            score = None
-            red_flags.append("Riesgo: ningún componente disponible; score N/D")
 
         return RiskResult(
             score=score,
