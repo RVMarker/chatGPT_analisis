@@ -1,4 +1,4 @@
-from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, PriceData
+from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
 from investment_analyzer.pipeline.financial_data_loader import FinancialSnapshot
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 
@@ -17,8 +17,7 @@ class Loader:
         return FinancialSnapshot(
             price=PriceData(symbol=symbol, current=100),
             financials=FinancialStatements(
-                balance=BalanceSheet(), income=__import__("investment_analyzer.common.models", fromlist=["IncomeStatement"]).IncomeStatement(),
-                cashflow=CashFlow(), fiscal_date="2026-06-30",
+                balance=BalanceSheet(), income=IncomeStatement(), cashflow=CashFlow(), fiscal_date="2026-06-30",
             ),
             price_provider="fake", financials_provider="fake",
             price_provider_symbol=symbol, financials_provider_symbol=symbol,
@@ -53,9 +52,15 @@ class Decision:
         return context.decision
 
 
+class SmartMoney:
+    def analyze(self, history):
+        return type("Signal", (), {"as_dict": lambda self: {"score": None, "available": False, "evidence": []}})()
+
+
 def test_pipeline_runs_modules_in_dependency_order():
     calls = []
     modules = type("Modules", (), {})()
+    modules.technical = Recorder("technical", calls)
     modules.comparables = Recorder("comparables", calls)
     modules.sentiment = Recorder("sentiment", calls, value=[])
     modules.macro = Recorder("macro", calls)
@@ -71,9 +76,10 @@ def test_pipeline_runs_modules_in_dependency_order():
         financial_adapter=FinancialAdapter(),
         asset_loader=AssetLoader(),
         decision_module=Decision(),
+        smart_money_engine=SmartMoney(),
     )
     context = pipeline.run("FMTY14.MX")
 
     assert context.asset.symbol == "FMTY14.MX"
-    assert calls == ["comparables", "sentiment", "macro", "porter", "elliott", "dow", "backtest"]
+    assert calls == ["technical", "comparables", "sentiment", "macro", "porter", "elliott", "dow", "backtest"]
     assert context.decision["strategic"] == "MANTENER"
