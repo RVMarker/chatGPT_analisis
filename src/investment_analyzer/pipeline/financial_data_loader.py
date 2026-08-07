@@ -33,7 +33,10 @@ class FinancialDataLoader:
         return self.adapter.price(symbol), self.adapter.financial_statements(symbol)
 
     def _load_yahoo_history(self, symbol: str):
-        return self.adapter.price_history(symbol, period="2y", interval="1d")
+        loader = getattr(self.adapter, "price_history", None)
+        if loader is None:
+            return None
+        return loader(symbol, period="2y", interval="1d")
 
     def load(self, symbol: str) -> FinancialSnapshot:
         canonical = str(symbol).strip().upper()
@@ -43,7 +46,9 @@ class FinancialDataLoader:
         if self.provider_manager is None:
             price, financials = self._load_yahoo(canonical)
             history = self._load_yahoo_history(canonical)
-            return FinancialSnapshot(price, financials, "yahoo", "yahoo", canonical, canonical, history, "yahoo", canonical)
+            if history is not None:
+                history = _ensure_type(history, PriceHistory, "histórico")
+            return FinancialSnapshot(price, financials, "yahoo", "yahoo", canonical, canonical, history, "yahoo" if history else None, canonical if history else None)
 
         price_response = self.provider_manager.execute_with_fallback(canonical, "get_price")
         financial_response = self.provider_manager.execute_with_fallback(canonical, "get_financial_statements")
