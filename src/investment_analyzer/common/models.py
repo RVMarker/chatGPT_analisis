@@ -56,6 +56,7 @@ class BalanceSheet:
     shareholders_equity: float | None = None
     retained_earnings: float | None = None
     working_capital: float | None = None
+    property_value: float | None = None
 
 
 @dataclass(slots=True)
@@ -81,6 +82,9 @@ class CashFlow:
     depreciation_amortization: float | None = None
     property_gain_loss: float | None = None
     ffo_proxy: float | None = None
+    ffo_official: float | None = None
+    affo_official: float | None = None
+    recurring_capex: float | None = None
 
 
 @dataclass(slots=True)
