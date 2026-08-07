@@ -55,7 +55,7 @@ class FundamentalEngine:
         debt_to_equity = self._ratio(bs.total_liabilities, bs.shareholders_equity)
         net_margin = self._ratio(inc.net_income, inc.revenue)
         operating_margin = self._ratio(inc.operating_income, inc.revenue)
-        interest_coverage = self._ratio(inc.ebit, abs(inc.interest_expense))
+        interest_coverage = self._ratio(inc.ebit, abs(inc.interest_expense) if inc.interest_expense is not None else None)
         fcf_margin = self._ratio(cf.free_cash_flow, inc.revenue)
 
         profitability_score = None
@@ -111,9 +111,6 @@ class FundamentalEngine:
             accrual_gap = abs(float(inc.ebit) - float(inc.net_income))
             quality_score = self._bounded(100 - self._ratio(accrual_gap, abs(inc.ebit) or 1) * 100)
 
-        # Growth requires a comparable prior-period revenue/earnings series.
-        # This FinancialStatements model does not provide that series, so it
-        # must remain N/D rather than pretending that 50 is a measured score.
         unavailable_components = [
             name for name, value in {
                 "growth": growth_score,
@@ -137,8 +134,7 @@ class FundamentalEngine:
         }
         if available:
             total_weight = sum(weight for _, weight in available.values())
-            score = sum(value * (weight / total_weight) for value, weight in available.values())
-            score = round(score, 2)
+            score = round(sum(value * (weight / total_weight) for value, weight in available.values()), 2)
         else:
             score = None
             red_flags.append("Fundamental: ningún componente disponible; score N/D")
