@@ -43,10 +43,21 @@ def _breakdown_lines(title: str, items: Any) -> list[str]:
 
 def render_decision_report(context) -> str:
     decision = context.decision
-    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default="N/D")
-    tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default="N/D")
+    # Accept both the flat DecisionResult used by production and the nested
+    # strategic/tactical objects used by older integrations.
+    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None)
+    tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default=None)
     strategic_score = _get(decision, "strategic_score", default=None)
     tactical_score = _get(decision, "tactical_score", default=None)
+    if strategic_verdict is None:
+        strategic = _get(decision, "strategic", default={}) or {}
+        strategic_verdict = _get(strategic, "verdict", "decision", default="N/D")
+        strategic_score = _get(strategic, "score", default=strategic_score)
+    if tactical_verdict is None:
+        tactical = _get(decision, "tactical", default={}) or {}
+        tactical_verdict = _get(tactical, "verdict", "decision", default="N/D")
+        tactical_score = _get(tactical, "score", default=tactical_score)
+
     confidence = _get(decision, "confidence", default=None)
     metadata = getattr(context, "metadata", {}) or {}
     providers = metadata.get("data_providers", {})
