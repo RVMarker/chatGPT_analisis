@@ -33,10 +33,7 @@ def _breakdown_lines(title: str, items: Any) -> list[str]:
         available = _get(item, "available", default=True)
         weight_pct = weight * 100 if isinstance(weight, (int, float)) else weight
         status = "[N/D]" if available is False else ""
-        lines.append(
-            f"  {name:15s} score={_fmt(score, 2):>6} peso={_fmt(weight_pct, 1)}% "
-            f"aporte={_fmt(weighted, 2):>6} aporte%={_fmt(contribution, 1):>5} {status}"
-        )
+        lines.append(f"  {name:15s} score={_fmt(score, 2):>6} peso={_fmt(weight_pct, 1)}% aporte={_fmt(weighted, 2):>6} aporte%={_fmt(contribution, 1):>5} {status}")
     return lines
 
 
@@ -67,7 +64,6 @@ def render_decision_report(context) -> str:
     tactical_sufficient = _get(decision, "tactical_sufficient", default=None)
     strategic_coverage = _get(decision, "strategic_coverage", default=None)
     tactical_coverage = _get(decision, "tactical_coverage", default=None)
-
     confidence = _get(decision, "confidence", default=None)
     coverage = _get(decision, "data_coverage", default=None)
     base_confidence = _get(decision, "base_confidence", default=None)
@@ -88,89 +84,60 @@ def render_decision_report(context) -> str:
     is_reit_valuation = valuation_model == "FFO_CAPITALIZATION"
     fair_value_label = "FFO fair value/share" if is_reit_valuation else "Fair value/share"
     margin_label = "FFO margin of safety" if is_reit_valuation else "Margin of safety"
-    ffo_proxy = valuation.get("ffo_proxy")
-    source_quality = valuation.get("source_quality")
 
-    lines = [
-        "=" * 72,
-        "V11 — INFORME DE DECISIÓN DE INVERSIÓN",
-        "=" * 72,
-        f"Activo: {_get(context.asset, 'symbol', default='N/D')}",
-        "",
-        "DECISIÓN ESTRATÉGICA (años)",
-        f"  Veredicto : {_qualified_verdict(strategic_verdict, strategic_sufficient)}",
-        f"  Score     : {_fmt(strategic_score, 1)}/100",
-        f"  Cobertura : {_fmt(strategic_coverage, 1)}%",
-        "",
-        "DECISIÓN TÁCTICA (semanas)",
-        f"  Veredicto : {_qualified_verdict(tactical_verdict, tactical_sufficient)}",
-        f"  Score     : {_fmt(tactical_score, 1)}/100",
-        f"  Cobertura : {_fmt(tactical_coverage, 1)}%",
-        "",
-        "CALIDAD / CONFIANZA",
-        f"  Calidad de datos base : {_fmt(base_confidence, 1)}%",
-        f"  Cobertura decisoria   : {_fmt(coverage, 1)}%",
-        f"  Confianza de decisión : {_fmt(confidence, 1)}%",
-        "",
-    ]
-    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown))
-    lines.append("")
+    lines = ["=" * 72, "V11 — INFORME DE DECISIÓN DE INVERSIÓN", "=" * 72,
+             f"Activo: {_get(context.asset, 'symbol', default='N/D')}", "",
+             "DECISIÓN ESTRATÉGICA (años)",
+             f"  Veredicto : {_qualified_verdict(strategic_verdict, strategic_sufficient)}",
+             f"  Score     : {_fmt(strategic_score, 1)}/100",
+             f"  Cobertura : {_fmt(strategic_coverage, 1)}%", "",
+             "DECISIÓN TÁCTICA (semanas)",
+             f"  Veredicto : {_qualified_verdict(tactical_verdict, tactical_sufficient)}",
+             f"  Score     : {_fmt(tactical_score, 1)}/100",
+             f"  Cobertura : {_fmt(tactical_coverage, 1)}%", "",
+             "CALIDAD / CONFIANZA",
+             f"  Calidad de datos base : {_fmt(base_confidence, 1)}%",
+             f"  Cobertura decisoria   : {_fmt(coverage, 1)}%",
+             f"  Confianza de decisión : {_fmt(confidence, 1)}%", ""]
+    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown)); lines.append("")
     lines.extend(_breakdown_lines("DESGLOSE TÁCTICO", tactical_breakdown))
-    lines.extend([
-        "",
-        "COBERTURA FINANCIERA",
+    lines.extend(["", "COBERTURA FINANCIERA",
         f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}",
         f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}",
         f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}",
-        f"  Modelo valoración : {valuation_model}",
-    ])
+        f"  Modelo valoración : {valuation_model}"])
     if is_reit_valuation:
-        lines.append(f"  FFO proxy/share     : {_fmt(ffo_proxy / valuation.get('shares_outstanding'), 4) if ffo_proxy is not None and valuation.get('shares_outstanding') else 'N/D'}")
-        if source_quality:
-            lines.append(f"  Calidad FFO         : {source_quality}")
-    lines.extend([
-        f"  {fair_value_label:<22}: {_fmt(valuation.get('fair_value_per_share'), 2)}",
+        lines.append(f"  FFO/share           : {_fmt(valuation.get('ffo_per_share'), 4)}")
+        lines.append(f"  Calidad FFO         : {_fmt(valuation.get('source_quality'), 0)}")
+    lines.extend([f"  {fair_value_label:<22}: {_fmt(valuation.get('fair_value_per_share'), 2)}",
         f"  {margin_label:<22}: {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else f"  {margin_label:<22}: N/D",
         f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
         f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
-        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}",
-        "",
+        f"  Risk market leverage : {_fmt(risk.get('market_leverage'), 2)}",
+        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}", "",
         "DATOS UTILIZADOS",
         f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
         f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
         f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-        f"  Observaciones : {providers.get('history_length', 'N/D')}",
-        "",
-        "CONTEXTO — NO VOTA DIRECTAMENTE",
-    ])
+        f"  Observaciones : {providers.get('history_length', 'N/D')}", "", "CONTEXTO — NO VOTA DIRECTAMENTE"])
     if contextual:
-        for key, value in contextual.items():
-            lines.append(f"  {key:15s} {_fmt(value, 2)}")
-    else:
-        lines.append("  N/D")
-    lines.extend([
-        "",
-        "COMPARABLES — CONTEXTO",
+        for key, value in contextual.items(): lines.append(f"  {key:15s} {_fmt(value, 2)}")
+    else: lines.append("  N/D")
+    lines.extend(["", "COMPARABLES — CONTEXTO",
         f"  P/E activo       : {_fmt(comparables.get('pe'), 2)}",
         f"  P/E mediana peers: {_fmt(comparables.get('peer_pe_median'), 2)}",
         f"  P/E prima/descto : {_fmt(comparables.get('pe_premium_discount') * 100 if comparables.get('pe_premium_discount') is not None else None, 1)}%",
         f"  EV/EBITDA activo : {_fmt(comparables.get('ev_ebitda'), 2)}",
         f"  EV/EBITDA peers  : {_fmt(comparables.get('peer_ev_ebitda_median'), 2)}",
         f"  EV/EBITDA prima  : {_fmt(comparables.get('ev_ebitda_premium_discount') * 100 if comparables.get('ev_ebitda_premium_discount') is not None else None, 1)}%",
-        f"  Lectura          : {comparables.get('context', 'N/D')}",
-        "",
-        "MACRO — CONTEXTO",
-    ])
+        f"  Lectura          : {comparables.get('context', 'N/D')}", "", "MACRO — CONTEXTO"])
     if isinstance(macro, dict) and macro.get("available"):
         lines.append(f"  Score contextual: {_fmt(macro.get('score'), 1)}")
         lines.append(f"  Margen seguridad requerido: {_fmt(macro.get('required_margin'), 1)}%")
         lines.append(f"  {macro.get('explanation', '')}")
-    else:
-        lines.append("  N/D — fuente macroeconómica de producción aún no conectada")
-    if strengths:
-        lines.extend(["", "FORTALEZAS", *[f"  + {item}" for item in strengths]])
-    if red_flags:
-        lines.extend(["", "RED FLAGS", *[f"  - {item}" for item in red_flags]])
+    else: lines.append("  N/D — fuente macroeconómica de producción aún no conectada")
+    if strengths: lines.extend(["", "FORTALEZAS", *[f"  + {item}" for item in strengths]])
+    if red_flags: lines.extend(["", "RED FLAGS", *[f"  - {item}" for item in red_flags]])
     lines.append("=" * 72)
     return "\n".join(lines)
 
