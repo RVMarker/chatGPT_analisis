@@ -89,7 +89,6 @@ class ProductionMacroModule:
             return None
         if not text:
             return None
-        # Redact long alphanumeric tokens before exposing the diagnostic in CLI output.
         text = re.sub(r"\b[A-Za-z0-9]{32,}\b", "[REDACTED]", text)
         text = " ".join(text.split())
         return text[:240]
@@ -114,33 +113,8 @@ class ProductionMacroModule:
         value, date = self._latest(response.json().get("observations", []))
         return MacroSnapshot(series_id, value, date, "fred", title)
 
-    def _banxico(self, series_id: str, title: str) -> MacroSnapshot:
-        """Query Banxico SIE using its documented Bmx-Token header."""
-        token = self._banxico_token()
-        if not token:
-            return MacroSnapshot(series_id, None, None, "banxico", title)
-        response = self.session.get(
-            f"{BANXICO_BASE}/{series_id}/datos/oportuno",
-            headers={
-                "Bmx-Token": token,
-                "Accept": "application/json",
-                "User-Agent": "investment-analyzer-v11",
-            },
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        series = response.json().get("bmx", {}).get("series", [])
-        datos = series[0].get("datos", []) if series else []
-        value, date = self._latest(datos)
-        return MacroSnapshot(series_id, value, date, "banxico", title)
-
     def _banxico_batch(self) -> dict[str, MacroSnapshot]:
-        """Fetch all Mexican macro series in one authenticated SIE request.
-
-        Batching avoids three independent calls and makes an authentication/rate-limit
-        problem unambiguous: either the batch succeeds or diagnostics report the single
-        failing HTTP response.
-        """
+        """Fetch Mexican macro series in one authenticated SIE request."""
         token = self._banxico_token()
         result = {
             series_id: MacroSnapshot(series_id, None, None, "banxico", title)
@@ -167,9 +141,7 @@ class ProductionMacroModule:
                 continue
             value, date = self._latest(item.get("datos", []))
             current = result[series_id]
-            result[series_id] = MacroSnapshot(
-                series_id, value, date, current.provider, current.title
-            )
+            result[series_id] = MacroSnapshot(series_id, value, date, current.provider, current.title)
         return result
 
     @staticmethod
@@ -232,27 +204,28 @@ class ProductionMacroModule:
 
         mx: dict[str, Any] | None = None
         if self._is_mexico(symbol):
-            mx = {}
-            snapshots = {
-                series_id: snap
-                for series_id, snap in self._banxico_batch().items()
-            }
-            for key, (series_id, title) in self.BANXICO_SERIES.items():
-                snap = snapshots[series_id]
-                mx[key] = snap.value
-                mx[f"{key}_date"] = snap.date
+            mx = {key: None for key in self.BANXICO_SERIES}
+            for key in self.BANXICO_SERIES:
+                mx[f"{key}_date"] = None
+            try:
+                snapshots = self._banxico_batch()
+                for key, (series_id, _) in self.BANXICO_SERIES.items():
+                    snap = snapshots[series_id]
+                    mx[key] = snap.value
+                    mx[f"{key}_date"] = snap.date
+            except requests.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                status = getattr(response, "status_code", None)
+                suffix = f" HTTP {status}" if status else ""
+                diagnostic = self._response_diagnostic(response)
+                detail = f" — {diagnostic}" if diagnostic else ""
+                errors.append(f"Banxico batch: HTTPError{suffix}{detail}")
+            except Exception as exc:
+                errors.append(f"Banxico batch: {type(exc).__name__}")
 
             # No verified official SIE 10Y series is configured yet.
             mx["treasury_10y"] = None
             mx["treasury_10y_date"] = None
-
-            # A batch HTTP failure raises before this point; capture it once rather than
-            # pretending that each series independently failed.
-            if banxico_configured and not any(
-                value is not None for key, value in mx.items() if not key.endswith("_date")
-            ):
-                # This is only a diagnostic hint; the actual HTTP error is captured below.
-                pass
 
         us_regime = self._regime(
             us.get("policy_rate"), us.get("inflation_yoy"),
