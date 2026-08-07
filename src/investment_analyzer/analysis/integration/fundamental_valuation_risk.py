@@ -76,6 +76,7 @@ class FinancialAnalysisIntegrator:
                     source_quality=source_quality,
                     affo=cashflow.affo_official,
                     distribution=cashflow.dividends_paid,
+                    distribution_period=cashflow.dividends_paid_period,
                     property_value=balance.property_value,
                     net_debt=debt,
                     ebitda=income.ebitda,
