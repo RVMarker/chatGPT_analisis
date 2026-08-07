@@ -15,6 +15,15 @@ class FakeResponse:
         return self.payload
 
 
+class FailingResponse:
+    status_code = 400
+    text = '{"error":"invalid token 1234567890123456789012345678901234567890"}'
+
+    def raise_for_status(self):
+        import requests
+        raise requests.HTTPError("400", response=self)
+
+
 class FakeSession:
     def get(self, url, params=None, headers=None, timeout=None):
         if "stlouisfed.org" in url:
@@ -47,6 +56,13 @@ class FakeSession:
                 }
             }
         )
+
+
+class FailingBanxicoSession(FakeSession):
+    def get(self, url, params=None, headers=None, timeout=None):
+        if "banxico.org.mx" in url:
+            return FailingResponse()
+        return super().get(url, params=params, headers=headers, timeout=timeout)
 
 
 def test_mexican_asset_gets_us_and_mexico_macro(monkeypatch):
@@ -87,3 +103,18 @@ def test_missing_credentials_keeps_macro_context_safe(monkeypatch):
     assert result["us"]["policy_rate"] is None
     assert result["mexico"]["policy_rate"] is None
     assert result["score"] is None
+
+
+def test_banxico_http_error_is_non_fatal_and_redacts_server_token(monkeypatch):
+    monkeypatch.setenv("FRED_API_KEY", "test")
+    monkeypatch.setenv("BANXICO_TOKEN", "test")
+    context = SimpleNamespace(asset=SimpleNamespace(symbol="FMTY14.MX"))
+    result = ProductionMacroModule(session=FailingBanxicoSession()).run(context)
+
+    assert result["available"] is True  # FRED remains available.
+    assert result["mexico"]["policy_rate"] is None
+    errors = result["diagnostics"]["errors"]
+    assert len(errors) == 1
+    assert "Banxico batch: HTTPError HTTP 400" in errors[0]
+    assert "1234567890123456789012345678901234567890" not in errors[0]
+    assert "[REDACTED]" in errors[0]
