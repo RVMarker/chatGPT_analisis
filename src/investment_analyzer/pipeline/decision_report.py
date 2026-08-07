@@ -75,11 +75,14 @@ def render_decision_report(context) -> str:
         "",
         "DECISIÓN ESTRATÉGICA (años)",
         f"  Veredicto : {strategic_verdict}",
-        f"  Score     : {_fmt(strategic_score, 2)}/100",
+        # Keep one decimal in the human-facing verdict line so values such as
+        # 82.5 remain directly searchable/readable while the detailed
+        # breakdown below retains two decimals.
+        f"  Score     : {_fmt(strategic_score, 1)}/100",
         "",
         "DECISIÓN TÁCTICA (semanas)",
         f"  Veredicto : {tactical_verdict}",
-        f"  Score     : {_fmt(tactical_score, 2)}/100",
+        f"  Score     : {_fmt(tactical_score, 1)}/100",
         "",
         "CONFIANZA",
         f"  {_fmt(confidence, 1)}%",
