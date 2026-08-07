@@ -4,8 +4,9 @@ from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, text=""):
         self.payload = payload
+        self.text = text
 
     def raise_for_status(self):
         return None
@@ -26,14 +27,26 @@ class FakeSession:
                 "DGS10": "4.30",
             }
             return FakeResponse({"observations": [{"date": "2026-07-01", "value": values[series]}]})
-        series = url.split("/series/")[1].split("/")[0]
+
+        series_ids = url.split("/series/")[1].split("/")[0].split(",")
         values = {
             "SF61745": "7.00",
             "SP30578": "3.37",
             "SF43718": "17.90",
-            "SF63528": "9.10",
         }
-        return FakeResponse({"bmx": {"series": [{"datos": [{"fecha": "07/08/2026", "dato": values[series]}]}]}})
+        return FakeResponse(
+            {
+                "bmx": {
+                    "series": [
+                        {
+                            "idSerie": series_id,
+                            "datos": [{"fecha": "07/08/2026", "dato": values[series_id]}],
+                        }
+                        for series_id in series_ids
+                    ]
+                }
+            }
+        )
 
 
 def test_mexican_asset_gets_us_and_mexico_macro(monkeypatch):
