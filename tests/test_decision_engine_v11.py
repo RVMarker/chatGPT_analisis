@@ -31,6 +31,8 @@ def test_all_strong_is_buy_on_both_horizons():
     assert result.strategic_decision == "COMPRAR"
     assert result.tactical_decision == "COMPRAR"
     assert result.confidence == 100
+    assert result.strategic_sufficient is True
+    assert result.tactical_sufficient is True
 
 
 def test_macro_and_comparables_do_not_vote():
@@ -87,10 +89,29 @@ def test_missing_components_are_excluded_and_weights_renormalized():
     assert result.tactical_score == 75.0
     assert result.strategic_decision == "MANTENER"
     assert result.tactical_decision == "ACUMULAR"
+    assert result.strategic_sufficient is True
+    assert result.tactical_sufficient is True
+    assert result.strategic_coverage == pytest.approx(66.67)
+    assert result.tactical_coverage == pytest.approx(66.67)
     assert result.strategic_breakdown[0].weight == pytest.approx(2 / 3)
     assert result.strategic_breakdown[1].available is False
     assert result.tactical_breakdown[0].weight == pytest.approx(0.75)
     assert result.tactical_breakdown[1].available is False
+
+
+def test_single_strategic_component_is_a_signal_not_a_robust_conclusion():
+    engine = DecisionEngine()
+    result = engine.evaluate(
+        strategic_scores={"fundamental": 33.26, "valuation": None, "risk": None},
+        tactical_scores={"technical": 32.25, "sentiment": None, "smart_money": 57.81},
+        confidence_inputs=_confidence(),
+    )
+    assert result.strategic_score == 33.26
+    assert result.strategic_decision == "VENDER"
+    assert result.strategic_coverage == pytest.approx(33.33)
+    assert result.strategic_sufficient is False
+    assert any("Cobertura estratégica insuficiente" in flag for flag in result.red_flags)
+    assert result.tactical_sufficient is True
 
 
 def test_no_available_evidence_returns_no_decision():
