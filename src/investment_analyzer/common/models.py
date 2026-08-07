@@ -78,6 +78,9 @@ class CashFlow:
     capex: float | None = None
     free_cash_flow: float | None = None
     dividends_paid: float | None = None
+    # Period of the total cash-flow value. Payout/FFO may only compare values
+    # on the same period basis; the REIT engine requires an explicit period.
+    dividends_paid_period: str | None = None
     share_buybacks: float | None = None
     depreciation_amortization: float | None = None
     property_gain_loss: float | None = None
