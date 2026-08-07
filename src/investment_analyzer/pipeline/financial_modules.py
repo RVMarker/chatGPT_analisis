@@ -2,7 +2,18 @@
 from __future__ import annotations
 
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
+from investment_analyzer.analysis.fundamental.fundamental_engine import FundamentalEngine
 from investment_analyzer.analysis.integration.fundamental_valuation_risk import FinancialAnalysisIntegrator
+from investment_analyzer.analysis.risk.risk_engine import RiskEngine
+from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine
+
+
+def _as_mapping(value):
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "as_dict"):
+        return value.as_dict()
+    raise TypeError(f"Resultado financiero no normalizado: {type(value).__name__}")
 
 
 class FinancialModuleAdapter:
@@ -10,6 +21,11 @@ class FinancialModuleAdapter:
 
     def __init__(self, integrator=None):
         self.integrator = integrator or FinancialAnalysisIntegrator()
+        # Expose the real engines for diagnostics and backwards-compatible
+        # integration tests without creating a second execution path.
+        self.fundamental_engine = self.integrator.fundamental
+        self.valuation_engine = self.integrator.valuation
+        self.risk_engine = self.integrator.risk
 
     def run(self, context: AnalysisContext):
         if context.financials is None:
@@ -19,22 +35,19 @@ class FinancialModuleAdapter:
 
         integrated = self.integrator.run(context.financials, context.price)
 
-        # Fundamental and Risk are real normalized scores; never replace them
-        # with a neutral 50 merely because valuation is unavailable.
-        context.fundamentals = integrated.fundamental.as_dict()
-        context.risk = integrated.risk.as_dict()
+        context.fundamentals = _as_mapping(integrated.fundamental)
+        context.risk = _as_mapping(integrated.risk)
 
-        if integrated.valuation is not None:
-            context.valuation = integrated.valuation.as_dict()
+        valuation = _as_mapping(integrated.valuation)
+        if valuation.get("available", True) and valuation.get("score") is not None:
+            context.valuation = valuation
             context.valuation["available"] = True
             context.dcf = context.valuation.get("dcf") or {}
         else:
-            # DCF unavailable is explicitly represented as unavailable.
-            # Decision code must not interpret this as a 50/100 valuation score.
             context.valuation = {
+                **valuation,
                 "available": False,
                 "score": None,
-                "reason": "DCF no disponible: faltan supuestos explícitos o datos suficientes",
             }
             context.dcf = {}
 
