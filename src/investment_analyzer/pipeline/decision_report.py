@@ -49,7 +49,6 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
     lines = ["MACRO — CONTEXTO (NO VOTA DIRECTAMENTE)"]
     if not isinstance(macro, dict):
         return lines + ["  N/D"]
-
     diagnostics = macro.get("diagnostics") or {}
     if not macro.get("available"):
         fred_status = "CONFIGURADA" if diagnostics.get("fred_configured") else "NO CONFIGURADA"
@@ -62,13 +61,9 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
             f"  Observaciones MX   : {diagnostics.get('mexico_observations', 0)}",
         ])
         errors = diagnostics.get("errors") or []
-        if errors:
-            lines.append("  Errores             : " + "; ".join(errors))
-        else:
-            lines.append("  Diagnóstico         : configura las credenciales en .env y vuelve a ejecutar")
+        lines.append("  Errores             : " + "; ".join(errors) if errors else "  Diagnóstico         : configura las credenciales en .env y vuelve a ejecutar")
         lines.append("  Macro es contextual y no vota directamente en BUY/SELL/HOLD.")
         return lines
-
     lines.extend([
         f"  Proveedores       : {_fmt(macro.get('provider'), 0)}",
         f"  Margen requerido  : {_fmt(macro.get('required_margin'), 1)}%",
@@ -100,6 +95,26 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
     if errors:
         lines.append("  Errores parciales  : " + "; ".join(errors))
     lines.append("  Lectura            : " + _fmt(macro.get("explanation"), 0))
+    return lines
+
+
+def _reit_lines(valuation: dict[str, Any]) -> list[str]:
+    lines = [
+        "REIT / FIBRA — VALORACIÓN ESPECÍFICA",
+        f"  FFO/share              : {_fmt(valuation.get('ffo_per_share'), 4)}",
+        f"  AFFO/share             : {_fmt(valuation.get('affo_per_share'), 4)}",
+        f"  Distribución/share     : {_fmt(valuation.get('distribution_per_share'), 4)}",
+        f"  Payout / FFO           : {_fmt(valuation.get('payout_ratio'), 1)}%" if valuation.get('payout_ratio') is not None else "  Payout / FFO           : N/D",
+        f"  NAV/share               : {_fmt(valuation.get('nav_per_share'), 2)}",
+        f"  Cap rate               : {_fmt(valuation.get('cap_rate') * 100 if valuation.get('cap_rate') is not None else None, 2)}%",
+        f"  Net debt / EBITDA      : {_fmt(valuation.get('net_debt_to_ebitda'), 2)}x",
+        f"  Cobertura de intereses : {_fmt(valuation.get('interest_coverage'), 2)}x",
+        f"  Cobertura REIT          : {_fmt(valuation.get('component_coverage') * 100 if valuation.get('component_coverage') is not None else None, 1)}%",
+    ]
+    components = valuation.get("component_scores") or {}
+    if components:
+        lines.append("  Componentes que votan : " + ", ".join(f"{k}={v:.1f}" for k, v in components.items()))
+    lines.append("  P/E                    : CONTEXTO; no vota en valoración FIBRA")
     return lines
 
 
@@ -173,8 +188,10 @@ def render_decision_report(context) -> str:
         f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
         f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
         f"  Risk market leverage : {_fmt(risk.get('market_leverage'), 2)}",
-        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}", "",
-        "DATOS UTILIZADOS",
+        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}"])
+    if is_reit_valuation:
+        lines.extend(["", *_reit_lines(valuation)])
+    lines.extend(["", "DATOS UTILIZADOS",
         f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
         f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
         f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
