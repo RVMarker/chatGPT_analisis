@@ -88,6 +88,12 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
             f"  MÉXICO USD/MXN    : {_fmt(mx.get('usd_mxn'), 4)}",
             f"  MÉXICO Bono 10Y   : {_fmt(mx.get('treasury_10y'), 2)}%",
         ])
+        cross = macro.get("cross_country") or {}
+        lines.extend([
+            f"  DIF. Banxico-Fed  : {_fmt(cross.get('policy_rate_spread_mx_us'), 2)} pp",
+            f"  DIF. Bono 10Y     : {_fmt(cross.get('treasury_10y_spread_mx_us'), 2)} pp",
+            f"  Tasa real MX ex-post: {_fmt(cross.get('mexico_real_rate_ex_post'), 2)}%",
+        ])
     else:
         lines.append("  México             : No aplica; activo no identificado como .MX")
     errors = diagnostics.get("errors") or []
@@ -161,6 +167,7 @@ def render_decision_report(context) -> str:
     if is_reit_valuation:
         lines.append(f"  FFO/share           : {_fmt(valuation.get('ffo_per_share'), 4)}")
         lines.append(f"  Calidad FFO         : {_fmt(valuation.get('source_quality'), 0)}")
+        lines.append(f"  Calidad valoración : {_fmt(valuation.get('valuation_quality'), 0)}")
     lines.extend([f"  {fair_value_label:<22}: {_fmt(valuation.get('fair_value_per_share'), 2)}",
         f"  {margin_label:<22}: {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else f"  {margin_label:<22}: N/D",
         f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
