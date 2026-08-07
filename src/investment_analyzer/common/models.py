@@ -12,10 +12,6 @@ from datetime import datetime
 from typing import Any
 
 
-# ======================================================================
-# PRICE
-# ======================================================================
-
 @dataclass(slots=True)
 class PriceData:
     symbol: str
@@ -34,7 +30,6 @@ class PriceData:
 
 @dataclass(slots=True)
 class PriceHistory:
-    """Historical OHLCV series required by technical indicators."""
     symbol: str
     dates: list[Any] = field(default_factory=list)
     open: list[float] = field(default_factory=list)
@@ -47,10 +42,6 @@ class PriceHistory:
     def __len__(self) -> int:
         return len(self.close)
 
-
-# ======================================================================
-# BALANCE SHEET
-# ======================================================================
 
 @dataclass(slots=True)
 class BalanceSheet:
@@ -67,10 +58,6 @@ class BalanceSheet:
     working_capital: float | None = None
 
 
-# ======================================================================
-# INCOME STATEMENT
-# ======================================================================
-
 @dataclass(slots=True)
 class IncomeStatement:
     revenue: float | None = None
@@ -84,10 +71,6 @@ class IncomeStatement:
     interest_expense: float | None = None
 
 
-# ======================================================================
-# CASH FLOW
-# ======================================================================
-
 @dataclass(slots=True)
 class CashFlow:
     operating_cash_flow: float | None = None
@@ -95,11 +78,10 @@ class CashFlow:
     free_cash_flow: float | None = None
     dividends_paid: float | None = None
     share_buybacks: float | None = None
+    depreciation_amortization: float | None = None
+    property_gain_loss: float | None = None
+    ffo_proxy: float | None = None
 
-
-# ======================================================================
-# FINANCIAL STATEMENTS
-# ======================================================================
 
 @dataclass(slots=True)
 class FinancialStatements:
@@ -108,10 +90,6 @@ class FinancialStatements:
     cashflow: CashFlow
     fiscal_date: str | None = None
 
-
-# ======================================================================
-# TECHNICAL
-# ======================================================================
 
 @dataclass(slots=True)
 class TechnicalIndicators:
@@ -126,10 +104,6 @@ class TechnicalIndicators:
     ema20: float | None = None
     bollinger_position: float | None = None
 
-
-# ======================================================================
-# FUNDAMENTAL RATIOS
-# ======================================================================
 
 @dataclass(slots=True)
 class FundamentalRatios:
@@ -146,10 +120,6 @@ class FundamentalRatios:
     net_margin: float | None = None
 
 
-# ======================================================================
-# VALUATION
-# ======================================================================
-
 @dataclass(slots=True)
 class ValuationData:
     market_price: float
@@ -163,10 +133,6 @@ class ValuationData:
     peg: float | None = None
 
 
-# ======================================================================
-# RISK
-# ======================================================================
-
 @dataclass(slots=True)
 class RiskMetrics:
     altman_z: float | None = None
@@ -178,10 +144,6 @@ class RiskMetrics:
     max_drawdown: float | None = None
 
 
-# ======================================================================
-# MACRO
-# ======================================================================
-
 @dataclass(slots=True)
 class MacroData:
     risk_free_rate: float | None = None
@@ -190,10 +152,6 @@ class MacroData:
     unemployment: float | None = None
     recession_probability: float | None = None
 
-
-# ======================================================================
-# NEWS
-# ======================================================================
 
 @dataclass(slots=True)
 class NewsItem:
@@ -204,10 +162,6 @@ class NewsItem:
     url: str
 
 
-# ======================================================================
-# PROVIDER RESULT
-# ======================================================================
-
 @dataclass(slots=True)
 class ProviderResult:
     provider: str
@@ -216,10 +170,6 @@ class ProviderResult:
     latency_ms: float
     payload: Any
 
-
-# ======================================================================
-# ANALYSIS
-# ======================================================================
 
 @dataclass(slots=True)
 class AnalysisResult:
