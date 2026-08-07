@@ -1,50 +1,39 @@
 """Human-readable CLI report for the V11 investment decision."""
 from __future__ import annotations
-
 from typing import Any
 
 
 def _fmt(value: Any, digits: int = 1) -> str:
-    if value is None:
-        return "N/D"
-    if isinstance(value, float):
-        return f"{value:.{digits}f}"
+    if value is None: return "N/D"
+    if isinstance(value, float): return f"{value:.{digits}f}"
     return str(value)
 
 
 def _get(obj: Any, *keys: str, default=None):
     for key in keys:
-        if isinstance(obj, dict) and key in obj:
-            return obj[key]
-        if hasattr(obj, key):
-            return getattr(obj, key)
+        if isinstance(obj, dict) and key in obj: return obj[key]
+        if hasattr(obj, key): return getattr(obj, key)
     return default
 
 
 def _breakdown_lines(title: str, items: Any) -> list[str]:
     lines = [title]
-    if not items:
-        lines.append("  N/D")
-        return lines
+    if not items: return lines + ["  N/D"]
     for item in items:
         name = _get(item, "name", default="N/D")
         score = _get(item, "score", default=None)
         weight = _get(item, "weight", default=None)
         weighted = _get(item, "weighted", "weighted_contribution", default=None)
         contribution = _get(item, "contribution_pct", default=None)
+        available = _get(item, "available", default=True)
         weight_pct = weight * 100 if isinstance(weight, (int, float)) else weight
-        contribution_text = f" aporte%={_fmt(contribution, 1)}" if contribution is not None else ""
-        lines.append(
-            f"  {name:15s} score={_fmt(score, 2):>6} "
-            f"peso={_fmt(weight_pct, 1)}% aporte={_fmt(weighted, 2):>6}{contribution_text}"
-        )
+        status = "[N/D]" if available is False else ""
+        lines.append(f"  {name:15s} score={_fmt(score, 2):>6} peso={_fmt(weight_pct, 1)}% aporte={_fmt(weighted, 2):>6} aporte%={_fmt(contribution, 1):>5} {status}")
     return lines
 
 
 def render_decision_report(context) -> str:
     decision = context.decision
-    # Accept both the flat DecisionResult used by production and the nested
-    # strategic/tactical objects used by older integrations.
     strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None)
     tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default=None)
     strategic_score = _get(decision, "strategic_score", default=None)
@@ -59,6 +48,8 @@ def render_decision_report(context) -> str:
         tactical_score = _get(tactical, "score", default=tactical_score)
 
     confidence = _get(decision, "confidence", default=None)
+    coverage = _get(decision, "data_coverage", default=None)
+    base_confidence = _get(decision, "base_confidence", default=None)
     metadata = getattr(context, "metadata", {}) or {}
     providers = metadata.get("data_providers", {})
     strategic_breakdown = _get(decision, "strategic_breakdown", default=[])
@@ -66,54 +57,44 @@ def render_decision_report(context) -> str:
     contextual = _get(decision, "contextual", default={}) or {}
     strengths = _get(decision, "strengths", default=[]) or []
     red_flags = _get(decision, "red_flags", default=[]) or []
+    valuation = getattr(context, "valuation", {}) or {}
+    risk = getattr(context, "risk", {}) or {}
+    financial_meta = metadata.get("financial_integration", {}) or {}
 
     lines = [
-        "=" * 72,
-        "V11 — INFORME DE DECISIÓN DE INVERSIÓN",
-        "=" * 72,
-        f"Activo: {_get(context.asset, 'symbol', default='N/D')}",
-        "",
-        "DECISIÓN ESTRATÉGICA (años)",
-        f"  Veredicto : {strategic_verdict}",
-        # Keep one decimal in the human-facing verdict line so values such as
-        # 82.5 remain directly searchable/readable while the detailed
-        # breakdown below retains two decimals.
-        f"  Score     : {_fmt(strategic_score, 1)}/100",
-        "",
-        "DECISIÓN TÁCTICA (semanas)",
-        f"  Veredicto : {tactical_verdict}",
-        f"  Score     : {_fmt(tactical_score, 1)}/100",
-        "",
-        "CONFIANZA",
-        f"  {_fmt(confidence, 1)}%",
-        "",
+        "=" * 72, "V11 — INFORME DE DECISIÓN DE INVERSIÓN", "=" * 72,
+        f"Activo: {_get(context.asset, 'symbol', default='N/D')}", "",
+        "DECISIÓN ESTRATÉGICA (años)", f"  Veredicto : {strategic_verdict}", f"  Score     : {_fmt(strategic_score, 1)}/100", "",
+        "DECISIÓN TÁCTICA (semanas)", f"  Veredicto : {tactical_verdict}", f"  Score     : {_fmt(tactical_score, 1)}/100", "",
+        "CALIDAD / CONFIANZA",
+        f"  Calidad de datos base : {_fmt(base_confidence, 1)}%",
+        f"  Cobertura decisoria   : {_fmt(coverage, 1)}%",
+        f"  Confianza de decisión : {_fmt(confidence, 1)}%", "",
     ]
-    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown))
-    lines.append("")
+    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown)); lines.append("")
     lines.extend(_breakdown_lines("DESGLOSE TÁCTICO", tactical_breakdown))
     lines.extend([
-        "",
-        "DATOS UTILIZADOS",
+        "", "COBERTURA FINANCIERA",
+        f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}",
+        f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}",
+        f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}",
+        f"  DCF fair value/share : {_fmt(valuation.get('fair_value_per_share'), 2)}",
+        f"  DCF margin of safety : {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else "  DCF margin of safety : N/D",
+        f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
+        f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
+        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}",
+        "", "DATOS UTILIZADOS",
         f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
         f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
         f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-        f"  Observaciones : {providers.get('history_length', 'N/D')}",
-        "",
+        f"  Observaciones : {providers.get('history_length', 'N/D')}", "",
         "CONTEXTO — NO VOTA DIRECTAMENTE",
     ])
     if contextual:
-        for key, value in contextual.items():
-            lines.append(f"  {key:15s} {_fmt(value, 2)}")
-    else:
-        lines.append("  N/D")
-
-    if strengths:
-        lines.extend(["", "FORTALEZAS"])
-        lines.extend(f"  + {item}" for item in strengths)
-    if red_flags:
-        lines.extend(["", "RED FLAGS"])
-        lines.extend(f"  - {item}" for item in red_flags)
-
+        for key, value in contextual.items(): lines.append(f"  {key:15s} {_fmt(value, 2)}")
+    else: lines.append("  N/D")
+    if strengths: lines.extend(["", "FORTALEZAS", *[f"  + {item}" for item in strengths]])
+    if red_flags: lines.extend(["", "RED FLAGS", *[f"  - {item}" for item in red_flags]])
     lines.append("=" * 72)
     return "\n".join(lines)
 
