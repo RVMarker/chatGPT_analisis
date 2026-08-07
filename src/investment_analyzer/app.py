@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from investment_analyzer.pipeline.decision_module import DecisionModule
-from investment_analyzer.pipeline.decision_report import format_decision_report
+from investment_analyzer.pipeline.decision_report import render_decision_report
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
@@ -64,5 +64,5 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
 def run_application(ticker: str, **kwargs) -> int:
     pipeline, _, _ = build_application(**kwargs)
     context = pipeline.run(ticker)
-    print(format_decision_report(context))
+    print(render_decision_report(context))
     return 0
