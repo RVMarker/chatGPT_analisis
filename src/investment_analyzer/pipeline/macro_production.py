@@ -40,6 +40,12 @@ class ProductionMacroModule:
         "treasury_10y": ("DGS10", "US 10Y Treasury"),
     }
 
+    # FRED/OECD provides a production fallback for Mexico's long-term 10Y yield.
+    # Banxico remains the preferred source for Mexico policy rate, inflation and FX.
+    MEXICO_FRED_SERIES = {
+        "treasury_10y": ("IRLTLT01MXM156N", "Mexico 10Y government bond yield (OECD/FRED)"),
+    }
+
     # Verified Banxico SIE identifiers.
     BANXICO_SERIES = {
         "policy_rate": ("SF61745", "Banxico target rate"),
@@ -207,6 +213,25 @@ class ProductionMacroModule:
             mx = {key: None for key in self.BANXICO_SERIES}
             for key in self.BANXICO_SERIES:
                 mx[f"{key}_date"] = None
+
+            # Keep Mexico 10Y independent from Banxico authentication. This is
+            # especially important when the Banxico token is expired/invalid.
+            for key, (series_id, title) in self.MEXICO_FRED_SERIES.items():
+                try:
+                    snap = self._fred(series_id, title, units="lin")
+                except requests.HTTPError as exc:
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    suffix = f" HTTP {status}" if status else ""
+                    snap = MacroSnapshot(series_id, None, None, "fred", title)
+                    errors.append(f"FRED {series_id}: HTTPError{suffix}")
+                except Exception as exc:
+                    snap = MacroSnapshot(series_id, None, None, "fred", title)
+                    errors.append(f"FRED {series_id}: {type(exc).__name__}")
+                mx[key] = snap.value
+                mx[f"{key}_date"] = snap.date
+                mx[f"{key}_provider"] = snap.provider if snap.value is not None else None
+                mx[f"{key}_series"] = series_id
+
             try:
                 snapshots = self._banxico_batch()
                 for key, (series_id, _) in self.BANXICO_SERIES.items():
@@ -222,10 +247,6 @@ class ProductionMacroModule:
                 errors.append(f"Banxico batch: HTTPError{suffix}{detail}")
             except Exception as exc:
                 errors.append(f"Banxico batch: {type(exc).__name__}")
-
-            # No verified official SIE 10Y series is configured yet.
-            mx["treasury_10y"] = None
-            mx["treasury_10y_date"] = None
 
         us_regime = self._regime(
             us.get("policy_rate"), us.get("inflation_yoy"),
