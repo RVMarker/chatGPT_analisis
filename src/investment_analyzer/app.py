@@ -10,6 +10,7 @@ from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapte
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
 from investment_analyzer.pipeline.production_modules import UnavailableModule, YahooNewsModule
 from investment_analyzer.pipeline.comparables_production import ProductionComparablesModule
+from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
@@ -35,7 +36,7 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
         technical=TechnicalModule(),
         comparables=ProductionComparablesModule(manager),
         sentiment=YahooNewsModule(manager),
-        macro=UnavailableModule("macro"),
+        macro=ProductionMacroModule(),
         porter=UnavailableModule("porter"),
         elliott=UnavailableModule("elliott"),
         dow=UnavailableModule("dow"),
