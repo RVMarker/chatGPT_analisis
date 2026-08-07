@@ -2,10 +2,7 @@
 from __future__ import annotations
 
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
-from investment_analyzer.analysis.fundamental.fundamental_engine import FundamentalEngine
 from investment_analyzer.analysis.integration.fundamental_valuation_risk import FinancialAnalysisIntegrator
-from investment_analyzer.analysis.risk.risk_engine import RiskEngine
-from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine
 
 
 def _as_mapping(value):
@@ -21,8 +18,6 @@ class FinancialModuleAdapter:
 
     def __init__(self, integrator=None):
         self.integrator = integrator or FinancialAnalysisIntegrator()
-        # Expose the real engines for diagnostics and backwards-compatible
-        # integration tests without creating a second execution path.
         self.fundamental_engine = self.integrator.fundamental
         self.valuation_engine = self.integrator.valuation
         self.risk_engine = self.integrator.risk
@@ -44,11 +39,15 @@ class FinancialModuleAdapter:
             context.valuation["available"] = True
             context.dcf = context.valuation.get("dcf") or {}
         else:
-            context.valuation = {
-                **valuation,
-                "available": False,
-                "score": None,
-            }
+            context.valuation = {**valuation, "available": False, "score": None}
             context.dcf = {}
 
+        context.metadata.setdefault("financial_integration", {})
+        context.metadata["financial_integration"].update(
+            {
+                "fundamental_available": context.fundamentals.get("score") is not None,
+                "valuation_available": context.valuation.get("available", False),
+                "risk_available": context.risk.get("score") is not None,
+            }
+        )
         return context
