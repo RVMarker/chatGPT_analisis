@@ -27,10 +27,12 @@ class ConfidenceEngine:
         agreement = cls._bounded(agreement)
 
         completeness = 100.0 - missing
+        # Official V11 confidence weights: provider quality 30%, freshness
+        # 15%, cross-provider agreement 40%, completeness 15%.
         score = (
             providers * 0.30
-            + freshness * 0.25
-            + agreement * 0.30
+            + freshness * 0.15
+            + agreement * 0.40
             + completeness * 0.15
         )
         score = round(score, 2)
