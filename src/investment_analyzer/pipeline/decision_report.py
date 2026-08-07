@@ -47,32 +47,53 @@ def _qualified_verdict(verdict: str | None, sufficient: bool | None) -> str:
 
 def _macro_lines(macro: dict[str, Any]) -> list[str]:
     lines = ["MACRO — CONTEXTO (NO VOTA DIRECTAMENTE)"]
-    if not isinstance(macro, dict) or not macro.get("available"):
-        lines.append("  N/D — FRED/Banxico sin datos disponibles o sin credenciales configuradas")
+    if not isinstance(macro, dict):
+        return lines + ["  N/D"]
+
+    diagnostics = macro.get("diagnostics") or {}
+    if not macro.get("available"):
+        fred_status = "CONFIGURADA" if diagnostics.get("fred_configured") else "NO CONFIGURADA"
+        banxico_status = "CONFIGURADA" if diagnostics.get("banxico_configured") else "NO CONFIGURADA"
+        lines.extend([
+            "  Estado             : SIN DATOS MACRO",
+            f"  FRED API           : {fred_status}",
+            f"  Banxico API        : {banxico_status}" if diagnostics.get("banxico_configured") is not None else "  Banxico API        : N/A",
+            f"  Observaciones EUA  : {diagnostics.get('fred_observations', 0)}",
+            f"  Observaciones MX   : {diagnostics.get('mexico_observations', 0)}",
+        ])
+        errors = diagnostics.get("errors") or []
+        if errors:
+            lines.append("  Errores             : " + "; ".join(errors))
+        else:
+            lines.append("  Diagnóstico         : configura las credenciales en .env y vuelve a ejecutar")
+        lines.append("  Macro es contextual y no vota directamente en BUY/SELL/HOLD.")
         return lines
 
     lines.extend([
         f"  Proveedores       : {_fmt(macro.get('provider'), 0)}",
         f"  Margen requerido  : {_fmt(macro.get('required_margin'), 1)}%",
         f"  EUA régimen       : {_fmt(macro.get('us_regime'), 0)}",
-        f"  EUA Fed funds    : {_fmt((macro.get('us') or {}).get('policy_rate'), 2)}%",
-        f"  EUA inflación YoY: {_fmt((macro.get('us') or {}).get('inflation_yoy'), 2)}%",
+        f"  EUA Fed funds     : {_fmt((macro.get('us') or {}).get('policy_rate'), 2)}%",
+        f"  EUA inflación YoY : {_fmt((macro.get('us') or {}).get('inflation_yoy'), 2)}%",
         f"  EUA desempleo     : {_fmt((macro.get('us') or {}).get('unemployment'), 2)}%",
-        f"  EUA PIB real YoY : {_fmt((macro.get('us') or {}).get('real_gdp_yoy'), 2)}%",
-        f"  EUA Treasury 10Y : {_fmt((macro.get('us') or {}).get('treasury_10y'), 2)}%",
+        f"  EUA PIB real YoY  : {_fmt((macro.get('us') or {}).get('real_gdp_yoy'), 2)}%",
+        f"  EUA Treasury 10Y  : {_fmt((macro.get('us') or {}).get('treasury_10y'), 2)}%",
     ])
     mx = macro.get("mexico")
     if mx is not None:
         lines.extend([
-            "  MÉXICO régimen   : " + _fmt(macro.get("mexico_regime"), 0),
-            f"  MÉXICO Banxico   : {_fmt(mx.get('policy_rate'), 2)}%",
-            f"  MÉXICO inflación  : {_fmt(mx.get('inflation_yoy'), 2)}%",
-            f"  MÉXICO USD/MXN   : {_fmt(mx.get('usd_mxn'), 4)}",
-            f"  MÉXICO Bono 10Y  : {_fmt(mx.get('treasury_10y'), 2)}%",
+            "  MÉXICO régimen    : " + _fmt(macro.get("mexico_regime"), 0),
+            f"  MÉXICO Banxico    : {_fmt(mx.get('policy_rate'), 2)}%",
+            f"  MÉXICO inflación   : {_fmt(mx.get('inflation_yoy'), 2)}%",
+            f"  MÉXICO USD/MXN    : {_fmt(mx.get('usd_mxn'), 4)}",
+            f"  MÉXICO Bono 10Y   : {_fmt(mx.get('treasury_10y'), 2)}%",
         ])
     else:
-        lines.append("  México            : No aplica; activo no identificado como .MX")
-    lines.append("  Lectura           : " + _fmt(macro.get("explanation"), 0))
+        lines.append("  México             : No aplica; activo no identificado como .MX")
+    errors = diagnostics.get("errors") or []
+    if errors:
+        lines.append("  Errores parciales  : " + "; ".join(errors))
+    lines.append("  Lectura            : " + _fmt(macro.get("explanation"), 0))
     return lines
 
 
