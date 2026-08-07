@@ -20,12 +20,9 @@ def _breakdown_lines(title: str, items: Any) -> list[str]:
     lines = [title]
     if not items: return lines + ["  N/D"]
     for item in items:
-        name = _get(item, "name", default="N/D")
-        score = _get(item, "score", default=None)
-        weight = _get(item, "weight", default=None)
-        weighted = _get(item, "weighted", "weighted_contribution", default=None)
-        contribution = _get(item, "contribution_pct", default=None)
-        available = _get(item, "available", default=True)
+        name = _get(item, "name", default="N/D"); score = _get(item, "score", default=None)
+        weight = _get(item, "weight", default=None); weighted = _get(item, "weighted", "weighted_contribution", default=None)
+        contribution = _get(item, "contribution_pct", default=None); available = _get(item, "available", default=True)
         weight_pct = weight * 100 if isinstance(weight, (int, float)) else weight
         status = "[N/D]" if available is False else ""
         lines.append(f"  {name:15s} score={_fmt(score, 2):>6} peso={_fmt(weight_pct, 1)}% aporte={_fmt(weighted, 2):>6} aporte%={_fmt(contribution, 1):>5} {status}")
@@ -34,69 +31,34 @@ def _breakdown_lines(title: str, items: Any) -> list[str]:
 
 def render_decision_report(context) -> str:
     decision = context.decision
-    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None)
-    tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default=None)
-    strategic_score = _get(decision, "strategic_score", default=None)
-    tactical_score = _get(decision, "tactical_score", default=None)
+    strategic_verdict = _get(decision, "strategic_decision", "strategic_verdict", default=None); tactical_verdict = _get(decision, "tactical_decision", "tactical_verdict", default=None)
+    strategic_score = _get(decision, "strategic_score", default=None); tactical_score = _get(decision, "tactical_score", default=None)
     if strategic_verdict is None:
-        strategic = _get(decision, "strategic", default={}) or {}
-        strategic_verdict = _get(strategic, "verdict", "decision", default="N/D")
-        strategic_score = _get(strategic, "score", default=strategic_score)
+        strategic = _get(decision, "strategic", default={}) or {}; strategic_verdict = _get(strategic, "verdict", "decision", default="N/D"); strategic_score = _get(strategic, "score", default=strategic_score)
     if tactical_verdict is None:
-        tactical = _get(decision, "tactical", default={}) or {}
-        tactical_verdict = _get(tactical, "verdict", "decision", default="N/D")
-        tactical_score = _get(tactical, "score", default=tactical_score)
-
-    confidence = _get(decision, "confidence", default=None)
-    coverage = _get(decision, "data_coverage", default=None)
-    base_confidence = _get(decision, "base_confidence", default=None)
-    metadata = getattr(context, "metadata", {}) or {}
-    providers = metadata.get("data_providers", {})
-    strategic_breakdown = _get(decision, "strategic_breakdown", default=[])
-    tactical_breakdown = _get(decision, "tactical_breakdown", default=[])
-    contextual = _get(decision, "contextual", default={}) or {}
-    strengths = _get(decision, "strengths", default=[]) or []
-    red_flags = _get(decision, "red_flags", default=[]) or []
-    valuation = getattr(context, "valuation", {}) or {}
-    risk = getattr(context, "risk", {}) or {}
+        tactical = _get(decision, "tactical", default={}) or {}; tactical_verdict = _get(tactical, "verdict", "decision", default="N/D"); tactical_score = _get(tactical, "score", default=tactical_score)
+    confidence = _get(decision, "confidence", default=None); coverage = _get(decision, "data_coverage", default=None); base_confidence = _get(decision, "base_confidence", default=None)
+    metadata = getattr(context, "metadata", {}) or {}; providers = metadata.get("data_providers", {})
+    strategic_breakdown = _get(decision, "strategic_breakdown", default=[]); tactical_breakdown = _get(decision, "tactical_breakdown", default=[]); contextual = _get(decision, "contextual", default={}) or {}
+    strengths = _get(decision, "strengths", default=[]) or []; red_flags = _get(decision, "red_flags", default=[]) or []
+    valuation = getattr(context, "valuation", {}) or {}; risk = getattr(context, "risk", {}) or {}; comparables = getattr(context, "comparables", {}) or {}; macro = getattr(context, "macro", {}) or {}
     financial_meta = metadata.get("financial_integration", {}) or {}
-
-    lines = [
-        "=" * 72, "V11 — INFORME DE DECISIÓN DE INVERSIÓN", "=" * 72,
-        f"Activo: {_get(context.asset, 'symbol', default='N/D')}", "",
-        "DECISIÓN ESTRATÉGICA (años)", f"  Veredicto : {strategic_verdict}", f"  Score     : {_fmt(strategic_score, 1)}/100", "",
-        "DECISIÓN TÁCTICA (semanas)", f"  Veredicto : {tactical_verdict}", f"  Score     : {_fmt(tactical_score, 1)}/100", "",
-        "CALIDAD / CONFIANZA",
-        f"  Calidad de datos base : {_fmt(base_confidence, 1)}%",
-        f"  Cobertura decisoria   : {_fmt(coverage, 1)}%",
-        f"  Confianza de decisión : {_fmt(confidence, 1)}%", "",
-    ]
-    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown)); lines.append("")
-    lines.extend(_breakdown_lines("DESGLOSE TÁCTICO", tactical_breakdown))
-    lines.extend([
-        "", "COBERTURA FINANCIERA",
-        f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}",
-        f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}",
-        f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}",
-        f"  DCF fair value/share : {_fmt(valuation.get('fair_value_per_share'), 2)}",
-        f"  DCF margin of safety : {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else "  DCF margin of safety : N/D",
-        f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
-        f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
-        f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}",
-        "", "DATOS UTILIZADOS",
-        f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})",
-        f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})",
-        f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})",
-        f"  Observaciones : {providers.get('history_length', 'N/D')}", "",
-        "CONTEXTO — NO VOTA DIRECTAMENTE",
-    ])
+    lines = ["=" * 72, "V11 — INFORME DE DECISIÓN DE INVERSIÓN", "=" * 72, f"Activo: {_get(context.asset, 'symbol', default='N/D')}", "", "DECISIÓN ESTRATÉGICA (años)", f"  Veredicto : {strategic_verdict}", f"  Score     : {_fmt(strategic_score, 1)}/100", "", "DECISIÓN TÁCTICA (semanas)", f"  Veredicto : {tactical_verdict}", f"  Score     : {_fmt(tactical_score, 1)}/100", "", "CALIDAD / CONFIANZA", f"  Calidad de datos base : {_fmt(base_confidence, 1)}%", f"  Cobertura decisoria   : {_fmt(coverage, 1)}%", f"  Confianza de decisión : {_fmt(confidence, 1)}%", ""]
+    lines.extend(_breakdown_lines("DESGLOSE ESTRATÉGICO", strategic_breakdown)); lines.append(""); lines.extend(_breakdown_lines("DESGLOSE TÁCTICO", tactical_breakdown))
+    lines.extend(["", "COBERTURA FINANCIERA", f"  Fundamental : {'OK' if financial_meta.get('fundamental_available') else 'N/D'}", f"  Valuation   : {'OK' if financial_meta.get('valuation_available') else 'N/D'}", f"  Risk        : {'OK' if financial_meta.get('risk_available') else 'N/D'}", f"  DCF fair value/share : {_fmt(valuation.get('fair_value_per_share'), 2)}", f"  DCF margin of safety : {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else "  DCF margin of safety : N/D", f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}", f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}", f"  Risk current ratio   : {_fmt(risk.get('current_ratio'), 2)}", "", "DATOS UTILIZADOS", f"  Precio        : {providers.get('price', 'N/D')} ({providers.get('price_symbol', 'N/D')})", f"  Financieros   : {providers.get('financials', 'N/D')} ({providers.get('financials_symbol', 'N/D')})", f"  Histórico     : {providers.get('history', 'N/D')} ({providers.get('history_symbol', 'N/D')})", f"  Observaciones : {providers.get('history_length', 'N/D')}", "", "CONTEXTO — NO VOTA DIRECTAMENTE"])
     if contextual:
         for key, value in contextual.items(): lines.append(f"  {key:15s} {_fmt(value, 2)}")
     else: lines.append("  N/D")
+    lines.extend(["", "COMPARABLES — CONTEXTO", f"  P/E activo       : {_fmt(comparables.get('pe'), 2)}", f"  P/E mediana peers: {_fmt(comparables.get('peer_pe_median'), 2)}", f"  P/E prima/descto : {_fmt(comparables.get('pe_premium_discount') * 100 if comparables.get('pe_premium_discount') is not None else None, 1)}%", f"  EV/EBITDA activo : {_fmt(comparables.get('ev_ebitda'), 2)}", f"  EV/EBITDA peers  : {_fmt(comparables.get('peer_ev_ebitda_median'), 2)}", f"  EV/EBITDA prima  : {_fmt(comparables.get('ev_ebitda_premium_discount') * 100 if comparables.get('ev_ebitda_premium_discount') is not None else None, 1)}%", f"  Lectura          : {comparables.get('context', 'N/D')}"])
+    lines.extend(["", "MACRO — CONTEXTO"])
+    if isinstance(macro, dict) and macro.get("available"):
+        lines.append(f"  Score contextual: {_fmt(macro.get('score'), 1)}")
+        lines.append(f"  Margen seguridad requerido: {_fmt(macro.get('required_margin'), 1)}%")
+        lines.append(f"  {macro.get('explanation', '')}")
+    else: lines.append("  N/D — fuente macroeconómica de producción aún no conectada")
     if strengths: lines.extend(["", "FORTALEZAS", *[f"  + {item}" for item in strengths]])
     if red_flags: lines.extend(["", "RED FLAGS", *[f"  - {item}" for item in red_flags]])
-    lines.append("=" * 72)
-    return "\n".join(lines)
+    lines.append("=" * 72); return "\n".join(lines)
 
 
 def print_decision_report(context) -> None:
