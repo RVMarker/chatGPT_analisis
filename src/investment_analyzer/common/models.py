@@ -8,7 +8,7 @@ Modelos comunes utilizados por todos los módulos.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -25,7 +25,11 @@ class PriceData:
     shares_outstanding: float | None = None
     beta: float | None = None
     currency: str = "USD"
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Added at the end to preserve positional-constructor compatibility.
+    shares_outstanding_raw: float | None = None
+    shares_outstanding_source: str | None = None
+    shares_outstanding_scale: float | None = None
 
 
 @dataclass(slots=True)
@@ -85,6 +89,9 @@ class CashFlow:
     ffo_official: float | None = None
     affo_official: float | None = None
     recurring_capex: float | None = None
+    # Added at the end to preserve positional-constructor compatibility.
+    # Payout/FFO must only compare values on the same period basis.
+    dividends_paid_period: str | None = None
 
 
 @dataclass(slots=True)

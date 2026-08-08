@@ -3,6 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
 from investment_analyzer.pipeline.decision_module import DecisionModule
 from investment_analyzer.pipeline.decision_report import render_decision_report
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
@@ -29,7 +34,16 @@ class ModuleBundle:
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
-    """Build the production stack used by the CLI."""
+    """Build the production stack used by the CLI.
+
+    Dotenv loading is intentionally performed here, at the composition root,
+    rather than inside individual analysis modules. Direct module tests can
+    therefore prove missing-credential behavior deterministically while the
+    normal CLI still reads the project's .env file.
+    """
+    if load_dotenv is not None:
+        load_dotenv()
+
     registry, manager = build_provider_stack(yahoo_provider=yahoo_provider, fmp_provider=fmp_provider, symbol_mappings=symbol_mappings)
     data_loader = FinancialDataLoader(provider_manager=manager)
     modules = ModuleBundle(

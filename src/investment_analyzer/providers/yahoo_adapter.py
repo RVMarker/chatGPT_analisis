@@ -60,6 +60,48 @@ class YahooFinanceAdapter:
                 continue
         return None
 
+    @staticmethod
+    def _reconcile_share_count(
+        shares: float | None,
+        market_cap: float | None,
+        current_price: float | None,
+    ) -> tuple[float | None, float | None, str | None, float | None]:
+        """Validate Yahoo's share count against market-cap/price.
+
+        Some providers expose a share count with a unit/scale mismatch. We do
+        not silently trust it when it conflicts materially with the provider's
+        own market-cap and price. The implied count is used only when the
+        discrepancy is clearly a scale problem (roughly 1,000x or 1,000,000x).
+        """
+        raw = None if shares is None else float(shares)
+        if raw is not None and raw <= 0:
+            raw = None
+        implied = None
+        if market_cap is not None and current_price is not None and float(current_price) > 0:
+            mc = float(market_cap)
+            px = float(current_price)
+            if mc > 0:
+                implied = mc / px
+
+        if raw is None and implied is not None:
+            return implied, None, "market_cap/current_price", None
+        if raw is None:
+            return None, None, None, None
+        if implied is None:
+            return raw, raw, "yahoo_fast_info", 1.0
+
+        ratio = raw / implied
+        abs_ratio = abs(ratio)
+        for scale in (1_000_000.0, 1_000.0, 0.001, 0.000001):
+            if abs(ratio / scale - 1.0) <= 0.05:
+                normalized = raw / scale
+                return normalized, raw, "yahoo_fast_info_reconciled", scale
+
+        # A normal disagreement can occur because quote and market-cap fields
+        # are not sampled at exactly the same instant. Keep the provider value
+        # rather than manufacturing a new figure.
+        return raw, raw, "yahoo_fast_info", 1.0
+
     def price_history(self, symbol: str, period: str = "2y", interval: str = "1d") -> PriceHistory:
         ticker = self._ticker(symbol)
         frame = ticker.history(period=period, interval=interval, auto_adjust=False)
@@ -91,16 +133,23 @@ class YahooFinanceAdapter:
             closes = history["Close"].dropna()
             current = float(closes.iloc[-1])
             previous = float(closes.iloc[-2]) if len(closes) > 1 else None
+        market_cap = self._value(info, "market_cap", "marketCap")
+        raw_shares = self._value(info, "shares")
+        shares, shares_raw, shares_source, shares_scale = self._reconcile_share_count(
+            raw_shares, market_cap, current,
+        )
         return PriceData(
             symbol=symbol.upper(), current=float(current),
             previous_close=None if previous is None else float(previous),
             open=self._value(info, "open"), high=self._value(info, "day_high", "dayHigh"),
             low=self._value(info, "day_low", "dayLow"),
             volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
-            market_cap=self._value(info, "market_cap", "marketCap"),
-            shares_outstanding=self._value(info, "shares"), beta=None,
+            market_cap=market_cap, shares_outstanding=shares, beta=None,
             currency=self._value(info, "currency", default="USD") or "USD",
             timestamp=datetime.now(timezone.utc),
+            shares_outstanding_raw=shares_raw,
+            shares_outstanding_source=shares_source,
+            shares_outstanding_scale=shares_scale,
         )
 
     def financial_statements(self, symbol: str) -> FinancialStatements:
@@ -156,6 +205,10 @@ class YahooFinanceAdapter:
             capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
             free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
             dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
+            # yfinance's Ticker.cashflow endpoint is the annual cash-flow
+            # statement. Mark that explicitly so payout cannot silently mix
+            # an annual distribution with quarterly/monthly FFO.
+            dividends_paid_period="annual" if cashflow is not None and not getattr(cashflow, "empty", True) else None,
             share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
             depreciation_amortization=depreciation,
             property_gain_loss=property_gain,

@@ -154,6 +154,21 @@ class DecisionEngine:
         return self._weighted(data, TACTICAL)
 
     @staticmethod
+    def _quality_score(value: object) -> float:
+        """Translate evidence quality labels into a transparent 0–100 factor.
+
+        This factor affects confidence only; it never changes BUY/SELL/HOLD
+        scores. Defaults to 100 for backwards compatibility with callers that
+        do not provide valuation-quality metadata.
+        """
+        if value is None:
+            return 100.0
+        if isinstance(value, (int, float)):
+            return max(0.0, min(100.0, float(value)))
+        quality = str(value).upper()
+        return {"HIGH": 100.0, "MEDIUM": 75.0, "LOW": 50.0}.get(quality, 100.0)
+
+    @staticmethod
     def confidence(
         provider_quality: float,
         freshness: float,
@@ -161,6 +176,7 @@ class DecisionEngine:
         completeness: float,
         technical_data_quality: float = 100.0,
         coverage: float = 100.0,
+        valuation_quality: float | str | None = None,
     ) -> float:
         values = [
             max(0.0, min(100.0, float(v)))
@@ -172,12 +188,14 @@ class DecisionEngine:
                 technical_data_quality,
             ]
         ]
+        valuation_quality_score = DecisionEngine._quality_score(valuation_quality)
         base = (
-            values[0] * 0.27
-            + values[1] * 0.18
-            + values[2] * 0.27
-            + values[3] * 0.18
-            + values[4] * 0.10
+            values[0] * 0.243
+            + values[1] * 0.162
+            + values[2] * 0.243
+            + values[3] * 0.162
+            + values[4] * 0.090
+            + valuation_quality_score * 0.100
         )
         return round(base * max(0.0, min(100.0, float(coverage))) / 100.0, 2)
 
@@ -199,6 +217,7 @@ class DecisionEngine:
         strategic_coverage = self._coverage(strategic_items)
         tactical_coverage = self._coverage(tactical_items)
         coverage = round((strategic_coverage + tactical_coverage) / 2.0, 2)
+        valuation_quality = confidence_inputs.get("valuation_quality")
         base_confidence = self.confidence(
             confidence_inputs.get("provider_quality", 80),
             confidence_inputs.get("freshness", 80),
@@ -206,6 +225,7 @@ class DecisionEngine:
             confidence_inputs.get("completeness", 80),
             confidence_inputs.get("technical_data_quality", 100),
             100,
+            valuation_quality,
         )
         confidence = self.confidence(
             confidence_inputs.get("provider_quality", 80),
@@ -214,6 +234,7 @@ class DecisionEngine:
             confidence_inputs.get("completeness", 80),
             confidence_inputs.get("technical_data_quality", 100),
             coverage,
+            valuation_quality,
         )
         context = {}
         for key, value in (contextual or {}).items():
@@ -230,6 +251,11 @@ class DecisionEngine:
                 flags.append(
                     f"{item.name}: NO DISPONIBLE; excluido del promedio ponderado"
                 )
+        if valuation_quality is not None and str(valuation_quality).upper() != "HIGH":
+            flags.append(
+                f"Calidad de valoración {str(valuation_quality).upper()}: "
+                "reduce confianza, pero no altera el score ni el veredicto"
+            )
         if not strategic_sufficient and strategic_total is not None:
             flags.append(
                 f"Cobertura estratégica insuficiente: {strategic_coverage:.1f}%; "

@@ -59,6 +59,21 @@ class FinancialAnalysisIntegrator:
         risk = self.risk.calculate(statements, market_value_equity=price.market_cap)
         valuation: dict[str, Any]
         valuation_warnings: list[str] = []
+
+        # Share-count provenance matters for every per-share valuation. Yahoo
+        # may expose a scale-mismatched share count; the provider adapter can
+        # reconcile it against market-cap/price. Keep the correction visible.
+        if price.shares_outstanding_source == "yahoo_fast_info_reconciled":
+            valuation_warnings.append(
+                "Shares outstanding reconciliadas contra market cap/precio de Yahoo; "
+                f"escala aplicada: {price.shares_outstanding_scale:g}"
+            )
+        elif price.shares_outstanding_source == "market_cap/current_price":
+            valuation_warnings.append(
+                "Shares outstanding no disponibles en Yahoo; derivadas de market cap/precio "
+                "del mismo proveedor"
+            )
+
         is_reit = str(asset_type or "").upper() in {"REIT", "FIBRA"}
 
         if is_reit and price.shares_outstanding:
@@ -76,6 +91,7 @@ class FinancialAnalysisIntegrator:
                     source_quality=source_quality,
                     affo=cashflow.affo_official,
                     distribution=cashflow.dividends_paid,
+                    distribution_period=cashflow.dividends_paid_period,
                     property_value=balance.property_value,
                     net_debt=debt,
                     ebitda=income.ebitda,
@@ -87,6 +103,9 @@ class FinancialAnalysisIntegrator:
                 valuation["ffo_official"] = cashflow.ffo_official
                 valuation["affo_official"] = cashflow.affo_official
                 valuation["assumptions"] = {"required_yield": reit_required_yield, "growth": reit_growth}
+                valuation["shares_outstanding_raw"] = price.shares_outstanding_raw
+                valuation["shares_outstanding_source"] = price.shares_outstanding_source
+                valuation["shares_outstanding_scale"] = price.shares_outstanding_scale
                 valuation_warnings.extend(reit.warnings)
             else:
                 valuation = {"available": False, "score": None, "model": "FFO_CAPITALIZATION",
