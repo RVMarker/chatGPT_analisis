@@ -98,8 +98,15 @@ def test_non_mexican_asset_does_not_query_banxico(monkeypatch):
 
 
 def test_missing_credentials_keeps_macro_context_safe(monkeypatch):
-    monkeypatch.delenv("FRED_API_KEY", raising=False)
-    monkeypatch.delenv("BANXICO_TOKEN", raising=False)
+    for name in (
+        "FRED_API_KEY",
+        "FRED_KEY",
+        "BANXICO_TOKEN",
+        "BANXICO_KEY",
+        "BMX_TOKEN",
+        "BANXICO_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
     context = SimpleNamespace(asset=SimpleNamespace(symbol="FMTY14.MX"))
     result = ProductionMacroModule(session=FakeSession()).run(context)
 

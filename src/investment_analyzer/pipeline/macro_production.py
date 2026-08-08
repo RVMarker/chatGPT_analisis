@@ -136,8 +136,14 @@ class ProductionMacroModule:
         )
         response.raise_for_status()
         series = response.json().get("bmx", {}).get("series", [])
-        for item in series:
+        expected_ids = [series_id for series_id, _ in self.BANXICO_SERIES.values()]
+        for index, item in enumerate(series):
+            # Production responses identify each series with idSerie. Some test
+            # doubles and legacy gateways omit it; in that case the API contract
+            # still preserves the requested order, so map by position.
             series_id = item.get("idSerie")
+            if not series_id and index < len(expected_ids):
+                series_id = expected_ids[index]
             if series_id not in result:
                 continue
             value, date = self._latest(item.get("datos", []))
@@ -194,12 +200,12 @@ class ProductionMacroModule:
         def spread(mx_key: str, us_key: str) -> float | None:
             mx_value, us_value = mx.get(mx_key), us.get(us_key)
             if isinstance(mx_value, (int, float)) and isinstance(us_value, (int, float)):
-                return float(mx_value) - float(us_value)
+                return round(float(mx_value) - float(us_value), 2)
             return None
 
         real_rate = None
         if isinstance(mx.get("policy_rate"), (int, float)) and isinstance(mx.get("inflation_yoy"), (int, float)):
-            real_rate = float(mx["policy_rate"]) - float(mx["inflation_yoy"])
+            real_rate = round(float(mx["policy_rate"]) - float(mx["inflation_yoy"]), 2)
 
         return {
             "policy_rate_spread_mx_us": spread("policy_rate", "policy_rate"),
@@ -279,12 +285,12 @@ class ProductionMacroModule:
             value is not None for key, value in us.items()
             if not key.endswith("_date") and key != "errors"
         )
+        mexico_observation_keys = set(self.BANXICO_SERIES) | set(self.MEXICO_FRED_SERIES)
         mexico_observations = 0
         if mx is not None:
-            mexico_observations = sum(
-                value is not None for key, value in mx.items()
-                if not key.endswith("_date") and key != "errors"
-            )
+            # Count only actual macro measurements, never traceability metadata
+            # such as *_provider or *_series.
+            mexico_observations = sum(mx.get(key) is not None for key in mexico_observation_keys)
 
         diagnostics = {
             "fred_configured": fred_configured,

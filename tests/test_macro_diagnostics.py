@@ -18,7 +18,17 @@ class FakeSession:
     def get(self, url, params=None, headers=None, timeout=None):
         if "stlouisfed.org" in url:
             return FakeResponse({"observations": [{"date": "2026-07-01", "value": "5.25"}]})
-        return FakeResponse({"bmx": {"series": [{"datos": [{"fecha": "07/08/2026", "dato": "7.00"}]}]}})
+        return FakeResponse(
+            {
+                "bmx": {
+                    "series": [
+                        {"idSerie": "SF61745", "datos": [{"fecha": "07/08/2026", "dato": "7.00"}]},
+                        {"idSerie": "SP30578", "datos": [{"fecha": "07/08/2026", "dato": "3.12"}]},
+                        {"idSerie": "SF43718", "datos": [{"fecha": "07/08/2026", "dato": "17.14"}]},
+                    ]
+                }
+            }
+        )
 
 
 def test_macro_reports_configuration_and_source_errors(monkeypatch):

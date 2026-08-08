@@ -99,12 +99,14 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
 
 
 def _reit_lines(valuation: dict[str, Any]) -> list[str]:
+    payout_ratio = valuation.get("payout_ratio")
+    payout_pct = payout_ratio * 100 if payout_ratio is not None else None
     lines = [
         "REIT / FIBRA — VALORACIÓN ESPECÍFICA",
         f"  FFO/share              : {_fmt(valuation.get('ffo_per_share'), 4)}",
         f"  AFFO/share             : {_fmt(valuation.get('affo_per_share'), 4)}",
         f"  Distribución/share     : {_fmt(valuation.get('distribution_per_share'), 4)}",
-        f"  Payout / FFO           : {_fmt(valuation.get('payout_ratio'), 1)}%" if valuation.get('payout_ratio') is not None else "  Payout / FFO           : N/D",
+        f"  Payout / FFO           : {_fmt(payout_pct, 1)}%" if payout_pct is not None else "  Payout / FFO           : N/D",
         f"  NAV/share               : {_fmt(valuation.get('nav_per_share'), 2)}",
         f"  Cap rate               : {_fmt(valuation.get('cap_rate') * 100 if valuation.get('cap_rate') is not None else None, 2)}%",
         f"  Net debt / EBITDA      : {_fmt(valuation.get('net_debt_to_ebitda'), 2)}x",
