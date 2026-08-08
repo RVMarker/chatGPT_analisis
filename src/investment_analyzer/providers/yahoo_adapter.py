@@ -60,6 +60,28 @@ class YahooFinanceAdapter:
                 continue
         return None
 
+    @staticmethod
+    def _reconcile_share_count(shares: float | None, market_cap: float | None, current_price: float | None):
+        raw = None if shares is None else float(shares)
+        if raw is not None and raw <= 0:
+            raw = None
+        implied = None
+        if market_cap is not None and current_price is not None and float(current_price) > 0:
+            mc, px = float(market_cap), float(current_price)
+            if mc > 0:
+                implied = mc / px
+        if raw is None and implied is not None:
+            return implied, None, "market_cap/current_price", None
+        if raw is None:
+            return None, None, None, None
+        if implied is None:
+            return raw, raw, "yahoo_fast_info", 1.0
+        ratio = raw / implied
+        for scale in (1_000_000.0, 1_000.0, 0.001, 0.000001):
+            if abs(ratio / scale - 1.0) <= 0.05:
+                return raw / scale, raw, "yahoo_fast_info_reconciled", scale
+        return raw, raw, "yahoo_fast_info", 1.0
+
     def price_history(self, symbol: str, period: str = "2y", interval: str = "1d") -> PriceHistory:
         ticker = self._ticker(symbol)
         frame = ticker.history(period=period, interval=interval, auto_adjust=False)
@@ -70,14 +92,12 @@ class YahooFinanceAdapter:
         if missing:
             raise ValueError(f"Yahoo histórico incompleto para {symbol}: faltan {', '.join(missing)}")
         frame = frame.dropna(subset=["Close"]).copy()
-        return PriceHistory(
-            symbol=symbol.upper(), dates=list(frame.index),
-            open=[float(x) for x in frame["Open"].fillna(frame["Close"]).tolist()],
-            high=[float(x) for x in frame["High"].fillna(frame["Close"]).tolist()],
-            low=[float(x) for x in frame["Low"].fillna(frame["Close"]).tolist()],
-            close=[float(x) for x in frame["Close"].tolist()],
-            volume=[float(x) for x in frame["Volume"].fillna(0).tolist()], interval=interval,
-        )
+        return PriceHistory(symbol=symbol.upper(), dates=list(frame.index),
+                            open=[float(x) for x in frame["Open"].fillna(frame["Close"]).tolist()],
+                            high=[float(x) for x in frame["High"].fillna(frame["Close"]).tolist()],
+                            low=[float(x) for x in frame["Low"].fillna(frame["Close"]).tolist()],
+                            close=[float(x) for x in frame["Close"].tolist()],
+                            volume=[float(x) for x in frame["Volume"].fillna(0).tolist()], interval=interval)
 
     def price(self, symbol: str) -> PriceData:
         ticker = self._ticker(symbol)
@@ -91,76 +111,58 @@ class YahooFinanceAdapter:
             closes = history["Close"].dropna()
             current = float(closes.iloc[-1])
             previous = float(closes.iloc[-2]) if len(closes) > 1 else None
-        return PriceData(
-            symbol=symbol.upper(), current=float(current),
-            previous_close=None if previous is None else float(previous),
-            open=self._value(info, "open"), high=self._value(info, "day_high", "dayHigh"),
-            low=self._value(info, "day_low", "dayLow"),
-            volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
-            market_cap=self._value(info, "market_cap", "marketCap"),
-            shares_outstanding=self._value(info, "shares"), beta=None,
-            currency=self._value(info, "currency", default="USD") or "USD",
-            timestamp=datetime.now(timezone.utc),
-        )
+        market_cap = self._value(info, "market_cap", "marketCap")
+        raw_shares = self._value(info, "shares")
+        shares, shares_raw, shares_source, shares_scale = self._reconcile_share_count(raw_shares, market_cap, current)
+        return PriceData(symbol=symbol.upper(), current=float(current),
+                         previous_close=None if previous is None else float(previous),
+                         open=self._value(info, "open"), high=self._value(info, "day_high", "dayHigh"),
+                         low=self._value(info, "day_low", "dayLow"),
+                         volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
+                         market_cap=market_cap, shares_outstanding=shares, beta=None,
+                         currency=self._value(info, "currency", default="USD") or "USD",
+                         timestamp=datetime.now(timezone.utc),
+                         shares_outstanding_raw=shares_raw, shares_outstanding_source=shares_source,
+                         shares_outstanding_scale=shares_scale)
 
     def financial_statements(self, symbol: str) -> FinancialStatements:
         ticker = self._ticker(symbol)
-        balance = getattr(ticker, "balance_sheet", None)
-        income = getattr(ticker, "income_stmt", None)
-        cashflow = getattr(ticker, "cashflow", None)
-        bs = BalanceSheet(
-            total_assets=self._latest_statement_value(balance, "Total Assets"),
-            current_assets=self._latest_statement_value(balance, "Current Assets"),
-            cash=self._latest_statement_value(balance, "Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"),
-            inventory=self._latest_statement_value(balance, "Inventory"),
-            receivables=self._latest_statement_value(balance, "Receivables", "Accounts Receivable"),
-            total_liabilities=self._latest_statement_value(balance, "Total Liabilities Net Minority Interest", "Total Liabilities"),
-            current_liabilities=self._latest_statement_value(balance, "Current Liabilities"),
-            long_term_debt=self._latest_statement_value(balance, "Long Term Debt", "Long Term Debt And Capital Lease Obligation"),
-            shareholders_equity=self._latest_statement_value(balance, "Stockholders Equity", "Common Stock Equity"),
-            retained_earnings=self._latest_statement_value(balance, "Retained Earnings"),
-        )
+        balance, income, cashflow = getattr(ticker, "balance_sheet", None), getattr(ticker, "income_stmt", None), getattr(ticker, "cashflow", None)
+        bs = BalanceSheet(total_assets=self._latest_statement_value(balance, "Total Assets"),
+                          current_assets=self._latest_statement_value(balance, "Current Assets"),
+                          cash=self._latest_statement_value(balance, "Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"),
+                          inventory=self._latest_statement_value(balance, "Inventory"),
+                          receivables=self._latest_statement_value(balance, "Receivables", "Accounts Receivable"),
+                          total_liabilities=self._latest_statement_value(balance, "Total Liabilities Net Minority Interest", "Total Liabilities"),
+                          current_liabilities=self._latest_statement_value(balance, "Current Liabilities"),
+                          long_term_debt=self._latest_statement_value(balance, "Long Term Debt", "Long Term Debt And Capital Lease Obligation"),
+                          shareholders_equity=self._latest_statement_value(balance, "Stockholders Equity", "Common Stock Equity"),
+                          retained_earnings=self._latest_statement_value(balance, "Retained Earnings"))
         if bs.current_assets is not None and bs.current_liabilities is not None:
             bs.working_capital = bs.current_assets - bs.current_liabilities
-        inc = IncomeStatement(
-            revenue=self._latest_statement_value(income, "Total Revenue", "Operating Revenue"),
-            gross_profit=self._latest_statement_value(income, "Gross Profit"),
-            operating_income=self._latest_statement_value(income, "Operating Income"),
-            ebit=self._latest_statement_value(income, "EBIT", "Operating Income"),
-            ebitda=self._latest_statement_value(income, "EBITDA", "Normalized EBITDA"),
-            pretax_income=self._latest_statement_value(income, "Pretax Income"),
-            net_income=self._latest_statement_value(income, "Net Income", "Net Income Common Stockholders"),
-            eps=self._latest_statement_value(income, "Diluted EPS", "Basic EPS"),
-            interest_expense=self._latest_statement_value(income, "Interest Expense Non Operating", "Interest Expense"),
-        )
-        depreciation = self._latest_statement_value(
-            cashflow,
-            "Depreciation And Amortization",
-            "Depreciation",
-            "Depreciation Amortization Depletion",
-        )
-        property_gain = self._latest_statement_value(
-            cashflow,
-            "Gain Loss On Sale Of Assets",
-            "Gain Loss On Sale Of Investments",
-        )
-        net_income = inc.net_income
+        inc = IncomeStatement(revenue=self._latest_statement_value(income, "Total Revenue", "Operating Revenue"),
+                              gross_profit=self._latest_statement_value(income, "Gross Profit"),
+                              operating_income=self._latest_statement_value(income, "Operating Income"),
+                              ebit=self._latest_statement_value(income, "EBIT", "Operating Income"),
+                              ebitda=self._latest_statement_value(income, "EBITDA", "Normalized EBITDA"),
+                              pretax_income=self._latest_statement_value(income, "Pretax Income"),
+                              net_income=self._latest_statement_value(income, "Net Income", "Net Income Common Stockholders"),
+                              eps=self._latest_statement_value(income, "Diluted EPS", "Basic EPS"),
+                              interest_expense=self._latest_statement_value(income, "Interest Expense Non Operating", "Interest Expense"))
+        depreciation = self._latest_statement_value(cashflow, "Depreciation And Amortization", "Depreciation", "Depreciation Amortization Depletion")
+        property_gain = self._latest_statement_value(cashflow, "Gain Loss On Sale Of Assets", "Gain Loss On Sale Of Investments")
         ffo_proxy = None
-        if net_income is not None and depreciation is not None:
-            # Conservative proxy: no gain-on-sale adjustment unless Yahoo supplies it.
-            ffo_proxy = net_income + depreciation
+        if inc.net_income is not None and depreciation is not None:
+            ffo_proxy = inc.net_income + depreciation
             if property_gain is not None:
                 ffo_proxy -= property_gain
-        cf = CashFlow(
-            operating_cash_flow=self._latest_statement_value(cashflow, "Operating Cash Flow", "Total Cash From Operating Activities"),
-            capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
-            free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
-            dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
-            share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
-            depreciation_amortization=depreciation,
-            property_gain_loss=property_gain,
-            ffo_proxy=ffo_proxy,
-        )
+        cf = CashFlow(operating_cash_flow=self._latest_statement_value(cashflow, "Operating Cash Flow", "Total Cash From Operating Activities"),
+                      capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
+                      free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
+                      dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
+                      dividends_paid_period="annual" if cashflow is not None and not getattr(cashflow, "empty", True) else None,
+                      share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
+                      depreciation_amortization=depreciation, property_gain_loss=property_gain, ffo_proxy=ffo_proxy)
         if cf.free_cash_flow is None and cf.operating_cash_flow is not None and cf.capex is not None:
             cf.free_cash_flow = cf.operating_cash_flow + cf.capex
         dates = getattr(balance, "columns", [])
