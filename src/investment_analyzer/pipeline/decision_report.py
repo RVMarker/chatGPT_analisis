@@ -223,8 +223,12 @@ def render_decision_report(context) -> str:
         lines.append(f"  FFO/share           : {_fmt(valuation.get('ffo_per_share'), 4)}")
         lines.append(f"  Calidad FFO         : {_fmt(valuation.get('source_quality'), 0)}")
         lines.append(f"  Calidad valoración : {_fmt(valuation.get('valuation_quality'), 0)}")
-    lines.extend([f"  {fair_value_label:<22}: {_fmt(valuation.get('fair_value_per_share'), 2)}",
-        f"  {margin_label:<22}: {_fmt(valuation.get('margin_of_safety'), 1)}%" if valuation.get('margin_of_safety') is not None else f"  {margin_label:<22}: N/D",
+        lines.append(f"  FFO fair value/share   : {_fmt(valuation.get('fair_value_per_share'), 2)}")
+        lines.append(f"  FFO margin of safety  : {_fmt(valuation.get('margin_of_safety') * 100 if valuation.get('margin_of_safety') is not None else None, 1)}%" if valuation.get('margin_of_safety') is not None else "  FFO margin of safety  : N/D")
+    else:
+        lines.append(f"  Fair value/share      : {_fmt(valuation.get('fair_value_per_share'), 2)}")
+        lines.append(f"  Margin of safety      : {_fmt(valuation.get('margin_of_safety') * 100 if valuation.get('margin_of_safety') is not None else None, 1)}%" if valuation.get('margin_of_safety') is not None else "  Margin of safety      : N/D")
+    lines.extend([
         f"  Risk Altman Z        : {_fmt(risk.get('altman_score'), 2)}",
         f"  Risk D/E             : {_fmt(risk.get('debt_to_equity'), 2)}",
         f"  Risk market leverage : {_fmt(risk.get('market_leverage'), 2)}",
