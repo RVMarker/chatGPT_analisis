@@ -7,6 +7,7 @@ from investment_analyzer.analysis.context.analysis_context import AnalysisContex
 from investment_analyzer.analysis.tactical.sentiment_engine import SentimentEngine
 from investment_analyzer.analysis.tactical.smart_money_engine import SmartMoneyEngine
 from investment_analyzer.analysis.technical.technical_module_v11 import TechnicalAnalysisV11
+from investment_analyzer.pipeline.actionable_decision import ActionableDecisionAdapter
 from investment_analyzer.pipeline.decision_module import DecisionModule
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
@@ -17,13 +18,14 @@ from investment_analyzer.security.asset_loader import AssetLoader
 class AnalysisPipeline:
     def __init__(self, providers, modules, financial_adapter=None, financial_loader=None,
                  asset_loader=None, decision_module=None, technical_analyzer=None,
-                 sentiment_engine=None, smart_money_engine=None):
+                 sentiment_engine=None, smart_money_engine=None, actionable_adapter=None):
         self.providers = providers
         self.modules = modules
         self.asset_loader = asset_loader or AssetLoader()
         self.financial_loader = financial_loader or self._build_financial_loader(providers)
         self.financial_adapter = financial_adapter or FinancialModuleAdapter()
         self.decision_module = decision_module or DecisionModule()
+        self.actionable_adapter = actionable_adapter or ActionableDecisionAdapter()
         self.technical_analyzer = technical_analyzer or TechnicalAnalysisV11()
         self.sentiment_engine = sentiment_engine or SentimentEngine()
         self.smart_money_engine = smart_money_engine or SmartMoneyEngine()
@@ -83,8 +85,6 @@ class AnalysisPipeline:
         self.financial_adapter.run(context)
         context.comparables = self.modules.comparables.run(context)
 
-        # Preserve the existing sentiment module as the source of news records,
-        # then normalize those records through the evidence-based V11 engine.
         existing_sentiment = self.modules.sentiment.run(context)
         sentiment_signal = self.sentiment_engine.analyze(self._extract_news(existing_sentiment))
         context.sentiment = sentiment_signal.as_dict()
@@ -105,4 +105,6 @@ class AnalysisPipeline:
         context.backtest = self.modules.backtest.run(context)
 
         self.decision_module.run(context)
+        self.actionable_adapter.apply(context.decision)
+        context.metadata["actionable_decision"] = context.decision.actionable
         return context
