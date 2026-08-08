@@ -2,6 +2,7 @@ from investment_analyzer.analysis.integration.fundamental_valuation_risk import 
 from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
 from investment_analyzer.pipeline.financial_modules import FinancialModuleAdapter
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
+from investment_analyzer.analysis.valuation.reit_engine import REITValuationEngine
 
 
 def _context(kind="STOCK", ffo_proxy=None):
@@ -37,3 +38,16 @@ def test_adapter_routes_fibra_to_reit_valuation():
     assert context.valuation["model"] == "FFO_CAPITALIZATION"
     assert context.valuation["source_quality"] == "FFO_PROXY"
     assert context.metadata["financial_integration"]["asset_type"] == "REIT"
+
+
+def test_adapter_recomputes_reit_score_from_reported_fair_value_and_current_price():
+    context = _context(kind="REIT", ffo_proxy=300)
+    FinancialModuleAdapter(integrator=FinancialAnalysisIntegrator()).run(context)
+
+    valuation = context.valuation
+    expected_margin = valuation["fair_value_per_share"] / context.price.current - 1.0
+    expected_score = REITValuationEngine._score(expected_margin)
+
+    assert valuation["margin_of_safety"] == expected_margin
+    assert valuation["score"] == expected_score
+    assert valuation["decision_price"] == context.price.current
