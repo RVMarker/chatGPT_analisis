@@ -209,7 +209,7 @@ class REITValuationEngine:
         reit_score = base_score
         if component_scores and len(component_scores) > 1:
             weights = {"ffo_value": 0.60, "payout": 0.15, "leverage": 0.15, "interest_coverage": 0.10}
-            active = [(name, score, weights[name]) for name, score in component_scores.items()]
+            active = [(name, score, weights[name]) for name, score, weight in component_scores.items()]
             total_weight = sum(weight for _, _, weight in active)
             reit_score = sum(score * weight for _, score, weight in active) / total_weight
         coverage = len(component_scores) / 4.0
