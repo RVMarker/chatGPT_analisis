@@ -22,6 +22,7 @@ class TacticalSignal:
     confidence: float
     evidence: list[Evidence] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -30,4 +31,5 @@ class TacticalSignal:
             "confidence": self.confidence,
             "evidence": [asdict(e) for e in self.evidence],
             "warnings": list(self.warnings),
+            "metadata": dict(self.metadata),
         }
