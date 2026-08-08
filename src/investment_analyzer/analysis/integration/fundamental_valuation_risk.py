@@ -1,4 +1,4 @@
-"""V12.15 asset-aware integration boundary."""
+"""V12.16 asset-aware integration boundary."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
@@ -13,21 +13,12 @@ from investment_analyzer.providers.provider_confidence import ProviderConfidence
 
 @dataclass(slots=True)
 class IntegratedFinancialAnalysis:
-    asset_type: str
-    fundamental: dict[str, Any]
-    valuation: dict[str, Any]
-    risk: dict[str, Any]
-    strengths: list[str]
-    red_flags: list[str]
-    provider_validation: dict[str, dict[str, Any]] | None = None
-    data_quality_score: float = 100.0
-    blocked_fields: list[str] | None = None
+    asset_type:str; fundamental:dict[str,Any]; valuation:dict[str,Any]; risk:dict[str,Any]; strengths:list[str]; red_flags:list[str]; provider_validation:dict[str,dict[str,Any]]|None=None; data_quality_score:float=100.0; blocked_fields:list[str]|None=None
     def as_dict(self): return asdict(self)
 
 class FinancialAnalysisIntegrator:
     ALIASES={"STOCK":"STOCK","STOCKS":"STOCK","EQUITY":"STOCK","ETF":"ETF","ETFS":"ETF","REIT":"REIT","REITS":"REIT","FIBRA":"FIBRA","FIBRAS":"FIBRA","CRYPTO":"CRYPTO","CRYPTOS":"CRYPTO","BOND":"BOND","BONDS":"BOND","FIXED_INCOME":"BOND","FIXED-INCOME":"BOND"}
-    def __init__(self,fundamental=None,valuation=None,risk=None,reit_valuation=None,etf_valuation=None,provider_confidence=None):
-        self.fundamental=fundamental or FundamentalEngine(); self.valuation=valuation or DCFEngine(); self.risk=risk or RiskEngine(); self.reit_valuation=reit_valuation or REITValuationEngine(); self.etf_valuation=etf_valuation or ETFValuationEngine(); self.provider_confidence=provider_confidence or ProviderConfidence()
+    def __init__(self,fundamental=None,valuation=None,risk=None,reit_valuation=None,etf_valuation=None,provider_confidence=None): self.fundamental=fundamental or FundamentalEngine(); self.valuation=valuation or DCFEngine(); self.risk=risk or RiskEngine(); self.reit_valuation=reit_valuation or REITValuationEngine(); self.etf_valuation=etf_valuation or ETFValuationEngine(); self.provider_confidence=provider_confidence or ProviderConfidence()
     @classmethod
     def normalize_asset_type(cls,asset_type):
         key=str(asset_type or "STOCK").strip().upper().replace(" ","_")
@@ -40,8 +31,7 @@ class FinancialAnalysisIntegrator:
         return points
     def run(self,statements:FinancialStatements,price:PriceData,*,growth_rates=None,wacc=None,terminal_growth=None,net_debt=None,asset_type="STOCK",reit_required_yield=.09,reit_growth=.03,provider_points:Iterable[DataPoint]|None=None,asset_context:dict[str,Any]|None=None):
         if price.current<=0: raise ValueError("El precio actual debe ser positivo")
-        asset=self.normalize_asset_type(asset_type); ctx=asset_context or {}; balance,income,cashflow=statements.balance,statements.income,statements.cashflow; debt=net_debt if net_debt is not None else float(balance.long_term_debt or 0)-float(balance.cash or 0)
-        fundamental=self.fundamental.calculate(statements)
+        asset=self.normalize_asset_type(asset_type); ctx=asset_context or {}; balance,income,cashflow=statements.balance,statements.income,statements.cashflow; debt=net_debt if net_debt is not None else float(balance.long_term_debt or 0)-float(balance.cash or 0); fundamental=self.fundamental.calculate(statements)
         raw={"ffo":cashflow.ffo_official if cashflow.ffo_official is not None else cashflow.ffo_proxy,"affo":cashflow.affo_official,"ebitda":income.ebitda,"net_debt":debt,"interest_expense":income.interest_expense,"property_value":balance.property_value,"shares_outstanding":price.shares_outstanding,"distribution":cashflow.dividends_paid}; points=list(provider_points or []); qualities={"ffo":"HIGH" if cashflow.ffo_official is not None else "LOW_MEDIUM","affo":"HIGH","ebitda":"MEDIUM","net_debt":"MEDIUM","interest_expense":"MEDIUM","property_value":"MEDIUM","shares_outstanding":"MEDIUM","distribution":"MEDIUM"}
         for f,v in raw.items(): points=self._points(points,f,v,quality=qualities[f])
         validation=self.provider_confidence.decide(points,raw.keys()); blocked=[f for f,d in validation.items() if not d.vote_allowed and d.status!="MISSING"]; dq=self.provider_confidence.score(validation); is_property=asset in {"REIT","FIBRA"}; risk=self.risk.calculate(statements,market_value_equity=price.market_cap,is_reit=is_property); warnings=[]; valuation={"available":False,"score":None,"model":"NONE","asset_type":asset,"warnings":[]}
@@ -55,7 +45,7 @@ class FinancialAnalysisIntegrator:
                 dcf:DCFResult=self.valuation.calculate(fcf_base=float(cashflow.free_cash_flow),growth_rates=growth_rates,wacc=float(wacc),terminal_growth=float(terminal_growth),net_debt=debt,shares_outstanding=price.shares_outstanding,current_price=price.current); valuation=dcf.as_dict(); valuation.update({"available":dcf.fair_value_per_share is not None,"model":"DCF","asset_type":asset}); warnings.extend(dcf.warnings)
             else: valuation["warnings"]=["STOCK: faltan FCF/assumptions para DCF"]
         elif asset=="ETF":
-            etf=self.etf_valuation.calculate(holdings=ctx.get("holdings",[]),expense_ratio=ctx.get("expense_ratio"),nav_per_share=ctx.get("nav_per_share"),current_price=price.current,premium_discount=ctx.get("premium_discount"),tracking_difference=ctx.get("tracking_difference"),sector_concentration=ctx.get("sector_concentration"),geography_concentration=ctx.get("geography_concentration"),category_expense_ratio=ctx.get("category_expense_ratio")); valuation=etf.as_dict(); valuation["asset_type"]=asset; warnings.extend(etf.warnings)
+            etf=self.etf_valuation.calculate(holdings=ctx.get("holdings",[]),expense_ratio=ctx.get("expense_ratio"),nav_per_share=ctx.get("nav_per_share"),current_price=price.current,premium_discount=ctx.get("premium_discount"),tracking_difference=ctx.get("tracking_difference"),tracking_error=ctx.get("tracking_error"),sector_concentration=ctx.get("sector_concentration"),geography_concentration=ctx.get("geography_concentration"),category_expense_ratio=ctx.get("category_expense_ratio"),benchmark=ctx.get("benchmark"),category=ctx.get("category"),benchmark_return=ctx.get("benchmark_return"),etf_return=ctx.get("etf_return"),dividend_yield=ctx.get("dividend_yield"),distribution_frequency=ctx.get("distribution_frequency")); valuation=etf.as_dict(); valuation["asset_type"]=asset; warnings.extend(etf.warnings)
         elif asset=="CRYPTO": valuation={"available":True,"score":None,"model":"CRYPTO_NETWORK_MARKET","asset_type":asset,"market_cap":ctx.get("market_cap",price.market_cap),"fdv":ctx.get("fdv"),"volume_24h":ctx.get("volume_24h"),"circulating_supply":ctx.get("circulating_supply"),"max_supply":ctx.get("max_supply"),"active_addresses":ctx.get("active_addresses"),"transaction_growth":ctx.get("transaction_growth"),"warnings":[]}
         elif asset=="BOND": valuation={"available":True,"score":None,"model":"BOND_YIELD_DURATION","asset_type":asset,"ytm":ctx.get("ytm"),"coupon":ctx.get("coupon"),"maturity_years":ctx.get("maturity_years"),"duration":ctx.get("duration"),"convexity":ctx.get("convexity"),"spread":ctx.get("spread"),"credit_rating":ctx.get("credit_rating"),"real_yield":ctx.get("real_yield"),"warnings":[]}
         warnings.extend(valuation.get("warnings",[])); strengths=list(dict.fromkeys(fundamental.strengths+risk.strengths)); red=list(dict.fromkeys(fundamental.red_flags+risk.red_flags+warnings));
