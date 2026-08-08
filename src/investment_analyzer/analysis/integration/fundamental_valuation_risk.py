@@ -1,4 +1,4 @@
-"""V12.14 asset-aware integration boundary."""
+"""V12.15 asset-aware integration boundary."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
@@ -55,11 +55,9 @@ class FinancialAnalysisIntegrator:
                 dcf:DCFResult=self.valuation.calculate(fcf_base=float(cashflow.free_cash_flow),growth_rates=growth_rates,wacc=float(wacc),terminal_growth=float(terminal_growth),net_debt=debt,shares_outstanding=price.shares_outstanding,current_price=price.current); valuation=dcf.as_dict(); valuation.update({"available":dcf.fair_value_per_share is not None,"model":"DCF","asset_type":asset}); warnings.extend(dcf.warnings)
             else: valuation["warnings"]=["STOCK: faltan FCF/assumptions para DCF"]
         elif asset=="ETF":
-            etf=self.etf_valuation.calculate(holdings=ctx.get("holdings",[]),expense_ratio=ctx.get("expense_ratio"),nav_per_share=ctx.get("nav_per_share"),current_price=price.current,premium_discount=ctx.get("premium_discount"),tracking_difference=ctx.get("tracking_difference")); valuation=etf.as_dict(); valuation["asset_type"]=asset; warnings.extend(etf.warnings)
-        elif asset=="CRYPTO":
-            valuation={"available":True,"score":None,"model":"CRYPTO_NETWORK_MARKET","asset_type":asset,"market_cap":ctx.get("market_cap",price.market_cap),"fdv":ctx.get("fdv"),"volume_24h":ctx.get("volume_24h"),"circulating_supply":ctx.get("circulating_supply"),"max_supply":ctx.get("max_supply"),"active_addresses":ctx.get("active_addresses"),"transaction_growth":ctx.get("transaction_growth"),"warnings":[]}
-        elif asset=="BOND":
-            valuation={"available":True,"score":None,"model":"BOND_YIELD_DURATION","asset_type":asset,"ytm":ctx.get("ytm"),"coupon":ctx.get("coupon"),"maturity_years":ctx.get("maturity_years"),"duration":ctx.get("duration"),"convexity":ctx.get("convexity"),"spread":ctx.get("spread"),"credit_rating":ctx.get("credit_rating"),"real_yield":ctx.get("real_yield"),"warnings":[]}
+            etf=self.etf_valuation.calculate(holdings=ctx.get("holdings",[]),expense_ratio=ctx.get("expense_ratio"),nav_per_share=ctx.get("nav_per_share"),current_price=price.current,premium_discount=ctx.get("premium_discount"),tracking_difference=ctx.get("tracking_difference"),sector_concentration=ctx.get("sector_concentration"),geography_concentration=ctx.get("geography_concentration"),category_expense_ratio=ctx.get("category_expense_ratio")); valuation=etf.as_dict(); valuation["asset_type"]=asset; warnings.extend(etf.warnings)
+        elif asset=="CRYPTO": valuation={"available":True,"score":None,"model":"CRYPTO_NETWORK_MARKET","asset_type":asset,"market_cap":ctx.get("market_cap",price.market_cap),"fdv":ctx.get("fdv"),"volume_24h":ctx.get("volume_24h"),"circulating_supply":ctx.get("circulating_supply"),"max_supply":ctx.get("max_supply"),"active_addresses":ctx.get("active_addresses"),"transaction_growth":ctx.get("transaction_growth"),"warnings":[]}
+        elif asset=="BOND": valuation={"available":True,"score":None,"model":"BOND_YIELD_DURATION","asset_type":asset,"ytm":ctx.get("ytm"),"coupon":ctx.get("coupon"),"maturity_years":ctx.get("maturity_years"),"duration":ctx.get("duration"),"convexity":ctx.get("convexity"),"spread":ctx.get("spread"),"credit_rating":ctx.get("credit_rating"),"real_yield":ctx.get("real_yield"),"warnings":[]}
         warnings.extend(valuation.get("warnings",[])); strengths=list(dict.fromkeys(fundamental.strengths+risk.strengths)); red=list(dict.fromkeys(fundamental.red_flags+risk.red_flags+warnings));
         if blocked:red.append("Campos bloqueados por conflicto de proveedores: "+", ".join(blocked))
         return IntegratedFinancialAnalysis(asset_type=asset,fundamental=fundamental.as_dict(),valuation=valuation,risk=risk.as_dict(),strengths=strengths,red_flags=red,provider_validation={k:asdict(v) for k,v in validation.items()},data_quality_score=dq,blocked_fields=blocked)
