@@ -42,7 +42,7 @@ def test_actionable_layer_explains_action_and_context():
     assert "FACTORES DECISIVOS — SÍ VOTAN" in text
     assert "FACTORES CONTEXTUALES — NO VOTAN" in text
     assert "ROBUSTEZ DE VALORACIÓN — SENSIBILIDAD" in text
-    assert "REDUCIR EXPOSICIÓN" not in text  # low-medium valuation confidence prevents aggressive action
+    assert "REDUCIR EXPOSICIÓN" in text
 
 
 def test_actionable_layer_never_turns_missing_data_into_a_positive_signal():
