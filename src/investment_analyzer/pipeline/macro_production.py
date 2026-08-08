@@ -8,16 +8,8 @@ from typing import Any
 
 import requests
 
-try:
-    from dotenv import load_dotenv
-except ImportError:  # pragma: no cover
-    load_dotenv = None
-
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 BANXICO_BASE = "https://www.banxico.org.mx/SieAPIRest/service/v1/series"
-
-if load_dotenv is not None:
-    load_dotenv()
 
 
 @dataclass(slots=True)
@@ -30,7 +22,13 @@ class MacroSnapshot:
 
 
 class ProductionMacroModule:
-    """Fetch and summarize macro context without voting in the decision."""
+    """Fetch and summarize macro context without voting in the decision.
+
+    Credentials are read only from the current process environment. Dotenv
+    loading belongs to the application composition root, not this analysis
+    module. This keeps missing-credential diagnostics deterministic and makes
+    tests immune to a developer's local .env file.
+    """
 
     FRED_SERIES = {
         "policy_rate": ("FEDFUNDS", "Fed funds rate"),
@@ -138,9 +136,6 @@ class ProductionMacroModule:
         series = response.json().get("bmx", {}).get("series", [])
         expected_ids = [series_id for series_id, _ in self.BANXICO_SERIES.values()]
         for index, item in enumerate(series):
-            # Production responses identify each series with idSerie. Some test
-            # doubles and legacy gateways omit it; in that case the API contract
-            # still preserves the requested order, so map by position.
             series_id = item.get("idSerie")
             if not series_id and index < len(expected_ids):
                 series_id = expected_ids[index]
@@ -288,10 +283,12 @@ class ProductionMacroModule:
         mexico_observation_keys = set(self.BANXICO_SERIES) | set(self.MEXICO_FRED_SERIES)
         mexico_observations = 0
         if mx is not None:
-            # Count only actual macro measurements, never traceability metadata
-            # such as *_provider or *_series.
             mexico_observations = sum(mx.get(key) is not None for key in mexico_observation_keys)
 
+        # A configured provider with zero usable observations is not "available".
+        # This distinction is important for decision confidence and diagnostics:
+        # credentials/configuration alone never count as data coverage.
+        available = bool(fred_observations or mexico_observations)
         diagnostics = {
             "fred_configured": fred_configured,
             "banxico_configured": banxico_configured if mx is not None else None,
@@ -302,7 +299,7 @@ class ProductionMacroModule:
         cross_country = self._cross_country_context(us, mx)
 
         return {
-            "available": bool(fred_observations or mexico_observations),
+            "available": available,
             "context_only": True,
             "score": None,
             "required_margin": self._required_margin(us, mx),
