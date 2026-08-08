@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from investment_analyzer.analysis.context.analysis_context import AnalysisContext
 from investment_analyzer.analysis.integration.fundamental_valuation_risk import FinancialAnalysisIntegrator
+from investment_analyzer.analysis.valuation.reit_engine import REITValuationEngine
 
 
 def _as_mapping(value):
@@ -40,6 +41,18 @@ class FinancialModuleAdapter:
 
         valuation = _as_mapping(integrated.valuation)
         if valuation.get("available", True) and valuation.get("score") is not None:
+            # Keep the decision score mathematically tied to the exact fair value
+            # and price exposed in the report. This prevents a stale/mismatched
+            # score from one intermediate engine from voting against the numbers
+            # actually shown to the user.
+            if valuation.get("model") == "FFO_CAPITALIZATION":
+                fair_value = valuation.get("fair_value_per_share")
+                current_price = getattr(context.price, "current", None)
+                if isinstance(fair_value, (int, float)) and isinstance(current_price, (int, float)) and current_price > 0:
+                    margin = float(fair_value) / float(current_price) - 1.0
+                    valuation["margin_of_safety"] = margin
+                    valuation["score"] = REITValuationEngine._score(margin)
+                    valuation["decision_price"] = float(current_price)
             context.valuation = valuation
             context.valuation["available"] = True
             context.dcf = context.valuation.get("dcf") or {}
