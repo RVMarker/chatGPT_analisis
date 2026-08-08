@@ -66,6 +66,14 @@ class DecisionModule:
             flags.extend(str(x) for x in technical.get("warnings", []) or [])
         return flags
 
+    @staticmethod
+    def _valuation_quality(context):
+        valuation = getattr(context, "valuation", {}) or {}
+        if not isinstance(valuation, dict):
+            return None
+        quality = valuation.get("valuation_quality")
+        return str(quality).upper() if quality is not None else None
+
     def run(self, context):
         fundamental = self._score(context.fundamentals)
         valuation = self._score(context.valuation)
@@ -85,6 +93,7 @@ class DecisionModule:
         )
         technical_quality = self._technical_quality(context)
         freshness = 100.0 if provider_data.get("history") else 0.0
+        valuation_quality = self._valuation_quality(context)
 
         result = self.engine.evaluate(
             strategic_scores={"fundamental": fundamental, "valuation": valuation, "risk": risk},
@@ -95,6 +104,7 @@ class DecisionModule:
                 "consistency": 80.0,
                 "completeness": completeness,
                 "technical_data_quality": technical_quality,
+                "valuation_quality": valuation_quality,
             },
             strengths=self._collect_strengths(context),
             red_flags=self._collect_red_flags(context),
