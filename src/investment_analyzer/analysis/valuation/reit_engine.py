@@ -25,6 +25,7 @@ class REITValuationResult:
     affo_per_share: float | None = None
     distribution_per_share: float | None = None
     payout_ratio: float | None = None
+    distribution_period: str | None = None
     nav_per_share: float | None = None
     cap_rate: float | None = None
     net_debt_to_ebitda: float | None = None
@@ -76,6 +77,19 @@ class REITValuationEngine:
         return "LOW"
 
     @staticmethod
+    def _normalize_period(period: str | None) -> str | None:
+        if period is None:
+            return None
+        normalized = str(period).strip().lower().replace("-", "_")
+        aliases = {
+            "annual": "annual", "year": "annual", "yearly": "annual",
+            "fiscal_year": "annual", "fy": "annual",
+            "quarter": "quarterly", "quarterly": "quarterly",
+            "month": "monthly", "monthly": "monthly",
+        }
+        return aliases.get(normalized, normalized)
+
+    @staticmethod
     def _leverage_score(net_debt_to_ebitda: float | None) -> float | None:
         if net_debt_to_ebitda is None:
             return None
@@ -121,44 +135,38 @@ class REITValuationEngine:
             return 50.0
         return 20.0
 
-    def calculate(
-        self,
-        *,
-        ffo: float,
-        shares_outstanding: float,
-        current_price: float,
-        required_yield: float = 0.09,
-        growth: float = 0.03,
-        source_quality: str = "FFO_PROXY",
-        affo: float | None = None,
-        distribution: float | None = None,
-        property_value: float | None = None,
-        net_debt: float | None = None,
-        ebitda: float | None = None,
-        interest_expense: float | None = None,
-    ) -> REITValuationResult:
+    def calculate(self, *, ffo: float, shares_outstanding: float, current_price: float,
+                  required_yield: float = 0.09, growth: float = 0.03,
+                  source_quality: str = "FFO_PROXY", affo: float | None = None,
+                  distribution: float | None = None, distribution_period: str | None = None,
+                  property_value: float | None = None, net_debt: float | None = None,
+                  ebitda: float | None = None, interest_expense: float | None = None) -> REITValuationResult:
         required_yield = self._rate("required_yield", required_yield)
         growth = self._rate("growth", growth)
         valuation_quality = self._quality(source_quality)
+        normalized_distribution_period = self._normalize_period(distribution_period)
         if required_yield <= growth:
             raise ValueError("required_yield debe ser mayor que growth")
         if shares_outstanding <= 0 or current_price <= 0:
             return REITValuationResult(False, "FFO_CAPITALIZATION", None, None, None, None,
                                        required_yield, growth, source_quality,
                                        ["Faltan acciones en circulación o precio actual válido"],
-                                       valuation_quality)
+                                       valuation_quality, distribution_period=normalized_distribution_period)
         if ffo <= 0:
             return REITValuationResult(False, "FFO_CAPITALIZATION", None, None, None, None,
                                        required_yield, growth, source_quality,
                                        ["FFO no positivo; no se puede capitalizar de forma robusta"],
-                                       valuation_quality)
+                                       valuation_quality, distribution_period=normalized_distribution_period)
 
         ffo_per_share = float(ffo) / float(shares_outstanding)
         fair_value = ffo_per_share * (1.0 + growth) / (required_yield - growth)
         margin = fair_value / float(current_price) - 1.0
         affo_per_share = float(affo) / float(shares_outstanding) if affo is not None else None
-        distribution_per_share = abs(float(distribution)) / float(shares_outstanding) if distribution is not None else None
-        payout_ratio = distribution_per_share / ffo_per_share if distribution_per_share is not None and ffo_per_share > 0 else None
+        distribution_per_share = None
+        payout_ratio = None
+        if distribution is not None and normalized_distribution_period == "annual":
+            distribution_per_share = abs(float(distribution)) / float(shares_outstanding)
+            payout_ratio = distribution_per_share / ffo_per_share if ffo_per_share > 0 else None
         nav_per_share = float(property_value) / float(shares_outstanding) if property_value is not None and property_value > 0 else None
         cap_rate = float(ffo) / float(property_value) if property_value is not None and property_value > 0 else None
         net_debt_to_ebitda = float(net_debt) / float(ebitda) if net_debt is not None and ebitda and ebitda > 0 else None
@@ -178,8 +186,6 @@ class REITValuationEngine:
         if coverage_score is not None:
             component_scores["interest_coverage"] = coverage_score
 
-        # NAV/cap-rate are displayed now but are not scored until a property-value
-        # source is available and validated. This avoids inventing property data.
         reit_score = base_score
         if component_scores and len(component_scores) > 1:
             weights = {"ffo_value": 0.60, "payout": 0.15, "leverage": 0.15, "interest_coverage": 0.10}
@@ -197,8 +203,10 @@ class REITValuationEngine:
             warnings.append("AFFO oficial no disponible; no se infiere AFFO a partir de FCF/capex")
         if property_value is None:
             warnings.append("NAV/cap-rate no disponibles: falta valor de propiedades validado")
-        if payout_ratio is None:
+        if distribution is None:
             warnings.append("Payout sobre FFO no disponible: falta distribución/dividendos trazables")
+        elif normalized_distribution_period != "annual":
+            warnings.append("Payout sobre FFO no disponible: la distribución no está identificada como anual; se evita mezclar períodos (trimestral/mensual/anual)")
         if net_debt_to_ebitda is None:
             warnings.append("Net debt/EBITDA REIT no disponible: falta EBITDA o deuda neta válida")
         if interest_coverage is None:
@@ -211,6 +219,6 @@ class REITValuationEngine:
         return REITValuationResult(
             True, "FFO_CAPITALIZATION", ffo_per_share, fair_value, margin, reit_score,
             required_yield, growth, source_quality, warnings, valuation_quality,
-            affo_per_share, distribution_per_share, payout_ratio, nav_per_share, cap_rate,
-            net_debt_to_ebitda, interest_coverage, component_scores, coverage,
+            affo_per_share, distribution_per_share, payout_ratio, normalized_distribution_period,
+            nav_per_share, cap_rate, net_debt_to_ebitda, interest_coverage, component_scores, coverage,
         )
