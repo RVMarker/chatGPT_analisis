@@ -1,4 +1,4 @@
-"""V12.17 asset-aware integration boundary."""
+"""V12.18 asset-aware integration boundary."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
@@ -8,6 +8,7 @@ from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine, DCFResu
 from investment_analyzer.analysis.valuation.reit_engine import REITValuationEngine
 from investment_analyzer.analysis.valuation.etf_engine import ETFValuationEngine
 from investment_analyzer.analysis.valuation.crypto_engine import CryptoValuationEngine
+from investment_analyzer.analysis.valuation.bond_engine import BondValuationEngine
 from investment_analyzer.common.models import FinancialStatements, PriceData
 from investment_analyzer.providers.provenance import DataPoint
 from investment_analyzer.providers.provider_confidence import ProviderConfidence
@@ -19,7 +20,7 @@ class IntegratedFinancialAnalysis:
 
 class FinancialAnalysisIntegrator:
     ALIASES={"STOCK":"STOCK","STOCKS":"STOCK","EQUITY":"STOCK","ETF":"ETF","ETFS":"ETF","REIT":"REIT","REITS":"REIT","FIBRA":"FIBRA","FIBRAS":"FIBRA","CRYPTO":"CRYPTO","CRYPTOS":"CRYPTO","BOND":"BOND","BONDS":"BOND","FIXED_INCOME":"BOND","FIXED-INCOME":"BOND"}
-    def __init__(self,fundamental=None,valuation=None,risk=None,reit_valuation=None,etf_valuation=None,crypto_valuation=None,provider_confidence=None): self.fundamental=fundamental or FundamentalEngine(); self.valuation=valuation or DCFEngine(); self.risk=risk or RiskEngine(); self.reit_valuation=reit_valuation or REITValuationEngine(); self.etf_valuation=etf_valuation or ETFValuationEngine(); self.crypto_valuation=crypto_valuation or CryptoValuationEngine(); self.provider_confidence=provider_confidence or ProviderConfidence()
+    def __init__(self,fundamental=None,valuation=None,risk=None,reit_valuation=None,etf_valuation=None,crypto_valuation=None,bond_valuation=None,provider_confidence=None): self.fundamental=fundamental or FundamentalEngine(); self.valuation=valuation or DCFEngine(); self.risk=risk or RiskEngine(); self.reit_valuation=reit_valuation or REITValuationEngine(); self.etf_valuation=etf_valuation or ETFValuationEngine(); self.crypto_valuation=crypto_valuation or CryptoValuationEngine(); self.bond_valuation=bond_valuation or BondValuationEngine(); self.provider_confidence=provider_confidence or ProviderConfidence()
     @classmethod
     def normalize_asset_type(cls,asset_type):
         key=str(asset_type or "STOCK").strip().upper().replace(" ","_")
@@ -49,7 +50,8 @@ class FinancialAnalysisIntegrator:
             etf=self.etf_valuation.calculate(holdings=ctx.get("holdings",[]),expense_ratio=ctx.get("expense_ratio"),nav_per_share=ctx.get("nav_per_share"),current_price=price.current,premium_discount=ctx.get("premium_discount"),tracking_difference=ctx.get("tracking_difference"),tracking_error=ctx.get("tracking_error"),sector_concentration=ctx.get("sector_concentration"),geography_concentration=ctx.get("geography_concentration"),category_expense_ratio=ctx.get("category_expense_ratio"),benchmark=ctx.get("benchmark"),category=ctx.get("category"),benchmark_return=ctx.get("benchmark_return"),etf_return=ctx.get("etf_return"),dividend_yield=ctx.get("dividend_yield"),distribution_frequency=ctx.get("distribution_frequency")); valuation=etf.as_dict(); valuation["asset_type"]=asset; warnings.extend(etf.warnings)
         elif asset=="CRYPTO":
             valuation=self.crypto_valuation.calculate(market_cap=ctx.get("market_cap",price.market_cap),fdv=ctx.get("fdv"),circulating_supply=ctx.get("circulating_supply"),total_supply=ctx.get("total_supply"),max_supply=ctx.get("max_supply"),volume_24h=ctx.get("volume_24h"),active_addresses=ctx.get("active_addresses"),transaction_growth=ctx.get("transaction_growth"),staking_yield=ctx.get("staking_yield"),token_unlock_pct=ctx.get("token_unlock_pct"),holder_concentration_top10=ctx.get("holder_concentration_top10"),fdv_peer_median=ctx.get("fdv_peer_median"),volume_peer_median=ctx.get("volume_peer_median")).as_dict(); valuation["asset_type"]=asset; warnings.extend(valuation.get("warnings",[]))
-        elif asset=="BOND": valuation={"available":True,"score":None,"model":"BOND_YIELD_DURATION","asset_type":asset,"ytm":ctx.get("ytm"),"coupon":ctx.get("coupon"),"maturity_years":ctx.get("maturity_years"),"duration":ctx.get("duration"),"convexity":ctx.get("convexity"),"spread":ctx.get("spread"),"credit_rating":ctx.get("credit_rating"),"real_yield":ctx.get("real_yield"),"warnings":[]}
+        elif asset=="BOND":
+            bond=self.bond_valuation.calculate(price=ctx.get("price",price.current),face_value=ctx.get("face_value"),coupon_rate=ctx.get("coupon"),ytm=ctx.get("ytm"),maturity_years=ctx.get("maturity_years"),duration=ctx.get("duration"),modified_duration=ctx.get("modified_duration"),convexity=ctx.get("convexity"),spread_bps=ctx.get("spread_bps"),credit_rating=ctx.get("credit_rating"),inflation=ctx.get("inflation"),benchmark_yield=ctx.get("benchmark_yield"),benchmark_name=ctx.get("benchmark_name")); valuation=bond.as_dict(); valuation["asset_type"]=asset; valuation["benchmark_name"]=ctx.get("benchmark_name"); warnings.extend(bond.warnings)
         strengths=list(dict.fromkeys(fundamental.strengths+risk.strengths)); red=list(dict.fromkeys(fundamental.red_flags+risk.red_flags+warnings));
         if blocked:red.append("Campos bloqueados por conflicto de proveedores: "+", ".join(blocked))
         return IntegratedFinancialAnalysis(asset_type=asset,fundamental=fundamental.as_dict(),valuation=valuation,risk=risk.as_dict(),strengths=strengths,red_flags=red,provider_validation={k:asdict(v) for k,v in validation.items()},data_quality_score=dq,blocked_fields=blocked)
