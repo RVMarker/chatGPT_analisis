@@ -2,6 +2,8 @@
 from __future__ import annotations
 from typing import Any
 
+from investment_analyzer.analysis.valuation.reit_engine import REITValuationEngine
+
 
 def _fmt(value: Any, digits: int = 1) -> str:
     if value is None:
@@ -98,12 +100,46 @@ def _macro_lines(macro: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _normalize_reit_valuation(valuation: dict[str, Any], context: Any) -> None:
+    """Make displayed REIT valuation fields authoritative and self-consistent.
+
+    The report must never display a fair value/margin pair from one snapshot
+    while voting with a stale score from another. The exact price used by the
+    decision is preferred; otherwise the normalized context price is used.
+    """
+    if valuation.get("model") != "FFO_CAPITALIZATION":
+        return
+    fair_value = valuation.get("fair_value_per_share")
+    decision_price = valuation.get("decision_price")
+    if not isinstance(decision_price, (int, float)) or decision_price <= 0:
+        price_data = getattr(context, "price", None)
+        decision_price = getattr(price_data, "current", None)
+    if not isinstance(fair_value, (int, float)) or fair_value <= 0:
+        return
+    if not isinstance(decision_price, (int, float)) or decision_price <= 0:
+        return
+
+    margin = float(fair_value) / float(decision_price) - 1.0
+    valuation["decision_price"] = float(decision_price)
+    valuation["margin_of_safety"] = margin
+    valuation["score"] = REITValuationEngine._score(margin)
+
+
 def _reit_lines(valuation: dict[str, Any]) -> list[str]:
     payout_ratio = valuation.get("payout_ratio")
     payout_pct = payout_ratio * 100 if payout_ratio is not None else None
+    decision_price = valuation.get("decision_price")
+    fair_value = valuation.get("fair_value_per_share")
+    upside = None
+    if isinstance(decision_price, (int, float)) and decision_price > 0 and isinstance(fair_value, (int, float)):
+        upside = fair_value / decision_price - 1.0
     lines = [
         "REIT / FIBRA — VALORACIÓN ESPECÍFICA",
+        f"  Precio usado valoración: {_fmt(decision_price, 2)}",
         f"  FFO/share              : {_fmt(valuation.get('ffo_per_share'), 4)}",
+        f"  FFO fair value/share   : {_fmt(fair_value, 2)}",
+        f"  Upside/downside FFO    : {_fmt(upside * 100 if upside is not None else None, 1)}%",
+        f"  Score valoración REIT : {_fmt(valuation.get('score'), 1)}/100",
         f"  AFFO/share             : {_fmt(valuation.get('affo_per_share'), 4)}",
         f"  Distribución/share     : {_fmt(valuation.get('distribution_per_share'), 4)}",
         f"  Payout / FFO           : {_fmt(payout_pct, 1)}%" if payout_pct is not None else "  Payout / FFO           : N/D",
@@ -157,6 +193,8 @@ def render_decision_report(context) -> str:
 
     valuation_model = valuation.get("model") or valuation.get("valuation_model") or "N/D"
     is_reit_valuation = valuation_model == "FFO_CAPITALIZATION"
+    if is_reit_valuation:
+        _normalize_reit_valuation(valuation, context)
     fair_value_label = "FFO fair value/share" if is_reit_valuation else "Fair value/share"
     margin_label = "FFO margin of safety" if is_reit_valuation else "Margin of safety"
 
