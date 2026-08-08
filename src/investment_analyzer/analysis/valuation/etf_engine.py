@@ -18,7 +18,10 @@ class ETFValuation:
     sector_concentration_pct:float|None; geography_concentration_pct:float|None
     category_expense_ratio_pct:float|None; dividend_yield_pct:float|None
     distribution_frequency:str|None; benchmark_return_pct:float|None; etf_return_pct:float|None
-    relative_return_pct:float|None; score:float|None; warnings:list[str]
+    relative_return_pct:float|None; score:float|None
+    peer_expense_median_pct:float|None; expense_premium_pct:float|None
+    peer_tracking_median_pct:float|None; tracking_premium_pct:float|None
+    warnings:list[str]
     def as_dict(self): return asdict(self)
 
 class ETFValuationEngine:
@@ -26,22 +29,27 @@ class ETFValuationEngine:
                   premium_discount=None, tracking_difference=None, tracking_error=None,
                   sector_concentration=None, geography_concentration=None, category_expense_ratio=None,
                   benchmark=None, category=None, benchmark_return=None, etf_return=None,
-                  dividend_yield=None, distribution_frequency=None):
+                  dividend_yield=None, distribution_frequency=None, peer_expense_median=None,
+                  peer_tracking_median=None):
         rows=[]
         for h in holdings or []:
             if isinstance(h,dict): ticker=h.get("ticker") or h.get("symbol") or h.get("holding") or "N/D"; name=h.get("name"); weight=h.get("weight_pct",h.get("weight",0))
             else: ticker=getattr(h,"ticker",getattr(h,"symbol","N/D")); name=getattr(h,"name",None); weight=getattr(h,"weight_pct",getattr(h,"weight",0))
             try: weight=float(weight)
             except (TypeError,ValueError): weight=0.0
+            if weight < 0: weight=0.0
             rows.append(ETFHolding(0,str(ticker),name,weight))
         rows=sorted(rows,key=lambda x:x.weight_pct,reverse=True)[:10]
         for i,r in enumerate(rows,1): r.rank=i
         top=[asdict(r) for r in rows]; top_weight=round(sum(r.weight_pct for r in rows),4) if rows else None
         if premium_discount is None and nav_per_share and current_price: premium_discount=(float(current_price)/float(nav_per_share)-1)*100
         relative_return=None if benchmark_return is None or etf_return is None else float(etf_return)-float(benchmark_return)
+        expense_premium=None if expense_ratio is None or peer_expense_median in (None,0) else (float(expense_ratio)/float(peer_expense_median)-1)*100
+        tracking_premium=None if tracking_difference is None or peer_tracking_median in (None,0) else (abs(float(tracking_difference))/abs(float(peer_tracking_median))-1)*100
         warnings=[]
         checks=((not rows,"ETF: composición no disponible"),(expense_ratio is None,"ETF: costo de administración (expense ratio) no disponible"),(nav_per_share is None,"ETF: NAV por participación no disponible"),(tracking_difference is None,"ETF: tracking difference no disponible"),(tracking_error is None,"ETF: tracking error no disponible"),(sector_concentration is None,"ETF: concentración sectorial no disponible"),(geography_concentration is None,"ETF: concentración geográfica no disponible"),(benchmark is None,"ETF: benchmark no disponible"))
         warnings += [msg for missing,msg in checks if missing]
+        if top_weight is not None and top_weight>70: warnings.append("ETF: concentración Top 10 elevada (>70%)")
         concentration_score=None if top_weight is None else (100.0 if top_weight<=35 else max(0.0,min(100.0,100-(top_weight-35)*2.5)))
         diversification_score=None
         if concentration_score is not None and sector_concentration is not None and geography_concentration is not None:
@@ -54,8 +62,7 @@ class ETFValuationEngine:
         if tracking_difference is not None or tracking_error is not None:
             td=abs(float(tracking_difference or 0)); te=abs(float(tracking_error or 0)); tracking_score=max(0,min(100,100-(td*60+te*40)))
         nav_score=None if premium_discount is None else max(0,min(100,100-abs(float(premium_discount))*20))
-        performance_score=None
-        if relative_return is not None: performance_score=max(0,min(100,50+relative_return*10))
+        performance_score=None if relative_return is None else max(0,min(100,50+relative_return*10))
         components=[x for x in (diversification_score,expense_score,tracking_score,nav_score,performance_score) if x is not None]
         quality_score=round(sum(components)/len(components),2) if components else None
-        return ETFValuation("ETF_NAV_TRACKING",category,benchmark,expense_ratio,top,top_weight,concentration_score,diversification_score,expense_score,tracking_score,nav_score,performance_score,quality_score,nav_per_share,premium_discount,tracking_difference,tracking_error,sector_concentration,geography_concentration,category_expense_ratio,dividend_yield,distribution_frequency,benchmark_return,etf_return,relative_return,quality_score,warnings)
+        return ETFValuation("ETF_NAV_TRACKING",category,benchmark,expense_ratio,top,top_weight,concentration_score,diversification_score,expense_score,tracking_score,nav_score,performance_score,quality_score,nav_per_share,premium_discount,tracking_difference,tracking_error,sector_concentration,geography_concentration,category_expense_ratio,dividend_yield,distribution_frequency,benchmark_return,etf_return,relative_return,quality_score,peer_expense_median,expense_premium,peer_tracking_median,tracking_premium,warnings)
