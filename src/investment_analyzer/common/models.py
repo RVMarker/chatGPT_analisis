@@ -26,6 +26,10 @@ class PriceData:
     beta: float | None = None
     currency: str = "USD"
     timestamp: datetime = field(default_factory=datetime.utcnow)
+    # Added at the end to preserve positional-constructor compatibility.
+    shares_outstanding_raw: float | None = None
+    shares_outstanding_source: str | None = None
+    shares_outstanding_scale: float | None = None
 
 
 @dataclass(slots=True)
