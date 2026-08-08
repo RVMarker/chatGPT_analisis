@@ -4,13 +4,10 @@ Investment Analyzer v11
 
 Modelos comunes utilizados por todos los módulos.
 """
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
-
 
 @dataclass(slots=True)
 class PriceData:
@@ -30,7 +27,6 @@ class PriceData:
     shares_outstanding_source: str | None = None
     shares_outstanding_scale: float | None = None
 
-
 @dataclass(slots=True)
 class PriceHistory:
     symbol: str
@@ -41,10 +37,7 @@ class PriceHistory:
     close: list[float] = field(default_factory=list)
     volume: list[float] = field(default_factory=list)
     interval: str = "1d"
-
-    def __len__(self) -> int:
-        return len(self.close)
-
+    def __len__(self) -> int: return len(self.close)
 
 @dataclass(slots=True)
 class BalanceSheet:
@@ -61,7 +54,6 @@ class BalanceSheet:
     working_capital: float | None = None
     property_value: float | None = None
 
-
 @dataclass(slots=True)
 class IncomeStatement:
     revenue: float | None = None
@@ -73,7 +65,6 @@ class IncomeStatement:
     net_income: float | None = None
     eps: float | None = None
     interest_expense: float | None = None
-
 
 @dataclass(slots=True)
 class CashFlow:
@@ -89,7 +80,7 @@ class CashFlow:
     affo_official: float | None = None
     recurring_capex: float | None = None
     dividends_paid_period: str | None = None
-
+    distribution_source: str | None = None
 
 @dataclass(slots=True)
 class FinancialStatements:
@@ -97,7 +88,6 @@ class FinancialStatements:
     income: IncomeStatement
     cashflow: CashFlow
     fiscal_date: str | None = None
-
 
 @dataclass(slots=True)
 class TechnicalIndicators:
@@ -111,7 +101,6 @@ class TechnicalIndicators:
     sma200: float | None = None
     ema20: float | None = None
     bollinger_position: float | None = None
-
 
 @dataclass(slots=True)
 class FundamentalRatios:
@@ -127,7 +116,6 @@ class FundamentalRatios:
     operating_margin: float | None = None
     net_margin: float | None = None
 
-
 @dataclass(slots=True)
 class ValuationData:
     market_price: float
@@ -140,7 +128,6 @@ class ValuationData:
     ev_ebitda: float | None = None
     peg: float | None = None
 
-
 @dataclass(slots=True)
 class RiskMetrics:
     altman_z: float | None = None
@@ -151,7 +138,6 @@ class RiskMetrics:
     sortino: float | None = None
     max_drawdown: float | None = None
 
-
 @dataclass(slots=True)
 class MacroData:
     risk_free_rate: float | None = None
@@ -159,7 +145,6 @@ class MacroData:
     fed_rate: float | None = None
     unemployment: float | None = None
     recession_probability: float | None = None
-
 
 @dataclass(slots=True)
 class NewsItem:
@@ -169,7 +154,6 @@ class NewsItem:
     source: str
     url: str
 
-
 @dataclass(slots=True)
 class ProviderResult:
     provider: str
@@ -177,7 +161,6 @@ class ProviderResult:
     success: bool
     latency_ms: float
     payload: Any
-
 
 @dataclass(slots=True)
 class AnalysisResult:
