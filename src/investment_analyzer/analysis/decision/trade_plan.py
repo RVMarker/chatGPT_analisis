@@ -42,7 +42,9 @@ def build_trade_plan(*, price, fair_value=None, bear_value=None, bull_value=None
         target_1 = None
         target_1_method = None
 
-    mos = ((fair - price) / fair * 100.0) if fair else None
+    # Canonical MOS: valuation upside/downside relative to the entry price.
+    # This must match DCFResult.margin_of_safety exactly.
+    mos = ((fair - price) / price * 100.0) if fair else None
     rr = ((target_2 - price) / risk_per_unit) if target_2 and risk_per_unit and risk_per_unit > 0 else None
     risk_budget = capital * float(risk_pct)
     max_position_value = capital * float(max_position_pct)
