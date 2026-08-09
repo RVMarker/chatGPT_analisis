@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from investment_analyzer.pipeline.decision_module import DecisionModule
 
 
@@ -23,4 +25,6 @@ def test_strategic_uses_all_four_components():
     assert result.strategic_score == 68.5
     assert result.strategic_coverage == 100.0
     weights = {x.name: x.weight for x in result.strategic_breakdown}
-    assert weights == {"fundamental": .35, "valuation": .30, "technical": .20, "risk": .15}
+    assert weights.keys() == {"fundamental", "valuation", "technical", "risk"}
+    for name, expected in {"fundamental": .35, "valuation": .30, "technical": .20, "risk": .15}.items():
+        assert weights[name] == pytest.approx(expected)
