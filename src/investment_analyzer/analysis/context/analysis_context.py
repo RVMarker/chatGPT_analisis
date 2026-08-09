@@ -1,4 +1,4 @@
-"""AnalysisContext shared by every V11 pipeline stage."""
+"""AnalysisContext shared by every V11/V12 pipeline stage."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,6 +35,7 @@ class AnalysisContext:
     seasonality: dict = field(default_factory=dict)
     backtest: dict = field(default_factory=dict)
     pe_history: dict = field(default_factory=dict)
+    trade_plan: dict = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
     decision: Any = None
     generated_files: dict = field(default_factory=dict)
