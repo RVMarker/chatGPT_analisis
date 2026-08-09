@@ -1,4 +1,4 @@
-"""Pipeline adapter for the transparent V11 DecisionEngine."""
+"""Pipeline adapter for the transparent V12 DecisionEngine."""
 from __future__ import annotations
 
 from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
@@ -87,8 +87,17 @@ class DecisionModule:
         freshness = 100.0 if provider_data.get("history") else 0.0
 
         result = self.engine.evaluate(
-            strategic_scores={"fundamental": fundamental, "valuation": valuation, "risk": risk},
-            tactical_scores={"technical": technical, "sentiment": sentiment, "smart_money": smart_money},
+            strategic_scores={
+                "fundamental": fundamental,
+                "valuation": valuation,
+                "technical": technical,
+                "risk": risk,
+            },
+            tactical_scores={
+                "technical": technical,
+                "sentiment": sentiment,
+                "smart_money": smart_money,
+            },
             confidence_inputs={
                 "provider_quality": provider_quality,
                 "freshness": freshness,
