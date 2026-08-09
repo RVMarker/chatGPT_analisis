@@ -1,4 +1,4 @@
-"""V12.50 bond valuation, duration, convexity and credit risk."""
+"""V12.73 bond valuation and transparent strategic/tactical decisions."""
 from __future__ import annotations
 from dataclasses import dataclass,asdict
 from typing import Any
@@ -7,6 +7,7 @@ from typing import Any
 class BondAnalysis:
     strategic_score:float; tactical_score:float; strategic_coverage:float; tactical_coverage:float
     fair_price:float|None; rate_sensitivity:float|None; components:dict[str,dict[str,Any]]; warnings:list[str]
+    strategic_verdict:str='HOLD'; tactical_verdict:str='HOLD'
     def as_dict(self): return asdict(self)
 
 class BondDecisionEngine:
@@ -23,7 +24,7 @@ class BondDecisionEngine:
         if coupon_rate is not None and yield_to_maturity is not None and maturity_years is not None:
             c=float(face)*float(coupon_rate); r=float(yield_to_maturity); m=int(maturity_years)
             fair=c*(1-(1+r)**(-m))/r+float(face)*(1+r)**(-m) if r else c*m+float(face)
-        vals={"valuation":None if fair is None or price is None else n(50+(fair/float(price)-1)*100),"credit":credit,"duration":dur,"cashflow":n(100-abs(float(coupon_rate or 0)*100- float(yield_to_maturity or 0)*100)*3) if coupon_rate is not None and yield_to_maturity is not None else None,"liquidity":liq,"inflation":inf}
+        vals={"valuation":None if fair is None or price is None else n(50+(fair/float(price)-1)*100),"credit":credit,"duration":dur,"cashflow":n(100-abs(float(coupon_rate or 0)*100-float(yield_to_maturity or 0)*100)*3) if coupon_rate is not None and yield_to_maturity is not None else None,"liquidity":liq,"inflation":inf}
         tv={"yield":y,"rate_sensitivity":rs,"spread":spr,"momentum":mom,"liquidity":liq}
         def calc(vals,weights):
             active=sum(weights[k] for k,v in vals.items() if v is not None); score=sum(weights[k]*v for k,v in vals.items() if v is not None)/active if active else 0
@@ -32,4 +33,5 @@ class BondDecisionEngine:
         if fair is None:warnings.append("Fair value de bono no calculable: faltan cupón, YTM o vencimiento")
         if duration is None:warnings.append("Duration ausente: sensibilidad a tasas no disponible")
         if credit_score is None:warnings.append("Credit score ausente")
-        return BondAnalysis(ss,ts,sc,tc,None if fair is None else round(fair,4),None if duration is None else round(-float(duration),4),{"strategic":vals,"tactical":tv},warnings)
+        sv='BUY' if ss>=65 else 'SELL' if ss<40 else 'HOLD'; tvv='BUY' if ts>=65 else 'SELL' if ts<40 else 'HOLD'
+        return BondAnalysis(ss,ts,sc,tc,None if fair is None else round(fair,4),None if duration is None else round(-float(duration),4),{"strategic":vals,"tactical":tv},warnings,sv,tvv)
