@@ -1,8 +1,9 @@
-"""V12.64 ETF-specific analysis with holdings, costs and exposure."""
+"""V12.66 unified ETF analysis: holdings, exposure, cost and tracking efficiency."""
 from __future__ import annotations
 from dataclasses import dataclass,asdict
 from typing import Any
 from investment_analyzer.analysis.etf_exposure import ETFExposureAnalyzer
+from investment_analyzer.analysis.etf_costs import ETFCostAnalyzer
 
 @dataclass(slots=True)
 class ETFAnalysis:
@@ -16,11 +17,12 @@ class ETFAnalysis:
     concentration_score:float|None=None
     coverage:float=0.0
     exposure:dict[str,Any]=None
+    costs:dict[str,Any]=None
     warnings:list[str]=None
     def as_dict(self): return asdict(self)
 
 class ETFAnalyzer:
-    def __init__(self,exposure_analyzer=None): self.exposure_analyzer=exposure_analyzer or ETFExposureAnalyzer()
+    def __init__(self,exposure_analyzer=None,cost_analyzer=None): self.exposure_analyzer=exposure_analyzer or ETFExposureAnalyzer(); self.cost_analyzer=cost_analyzer or ETFCostAnalyzer()
     def analyze(self,symbol,payload):
         p=payload or {}; holdings=p.get('holdings') or p.get('topHoldings') or p.get('constituents') or []
         normalized=[]
@@ -33,11 +35,11 @@ class ETFAnalyzer:
         top10=normalized[:10]; top10_weight=sum(x['weight'] or 0 for x in top10) if top10 else None; concentration=None if top10_weight is None else max(0,min(100,100-top10_weight))
         expense=p.get('expense_ratio') if p.get('expense_ratio') is not None else p.get('expenseRatio') if p.get('expenseRatio') is not None else p.get('annualReportExpenseRatio')
         fields=[p.get('price'),expense,p.get('benchmark'),p.get('aum') or p.get('totalAssets'),top10]; coverage=100*sum(x is not None and x!=[] for x in fields)/len(fields)
+        exposure=self.exposure_analyzer.analyze(normalized); costs=self.cost_analyzer.analyze(p)
         warnings=[]
         if not top10:warnings.append('TOP 10 holdings no disponibles')
-        if expense is None:warnings.append('Expense ratio no disponible')
-        exposure=self.exposure_analyzer.analyze(normalized)
-        return ETFAnalysis(symbol,p.get('price'),expense,p.get('benchmark'),p.get('aum') or p.get('totalAssets'),top10,top10_weight,concentration,round(coverage,1),exposure,warnings)
+        if costs['warnings']: warnings.extend(costs['warnings'])
+        return ETFAnalysis(symbol,p.get('price'),expense,p.get('benchmark'),p.get('aum') or p.get('totalAssets'),top10,top10_weight,concentration,round(coverage,1),exposure,costs,warnings)
     @staticmethod
     def _weight(v):
         if v is None:return None
