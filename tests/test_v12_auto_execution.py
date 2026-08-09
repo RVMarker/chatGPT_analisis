@@ -83,6 +83,12 @@ def test_fcff_conversion_adds_back_after_tax_interest_before_wacc_dcf():
     assert result.valuation["fcff_conversion"]["method"] == "reported_FCF_plus_after_tax_interest"
 
 
+def test_trade_plan_margin_of_safety_matches_dcf_convention():
+    plan = build_trade_plan(price=313.33, fair_value=80.75, bull_value=109.09, support=294.63, resistance=None)
+    assert plan["margin_of_safety_pct"] == pytest.approx((80.75 - 313.33) / 313.33 * 100.0)
+    assert plan["margin_of_safety_pct"] == pytest.approx(-74.2253, abs=0.01)
+
+
 def test_trade_plan_blocks_without_real_target1_resistance():
     plan = build_trade_plan(price=100.0, fair_value=140.0, bull_value=160.0, support=90.0, resistance=None, capital=5000.0, risk_pct=0.02, max_position_pct=0.25)
     assert plan["stop_loss"] == 90.0
