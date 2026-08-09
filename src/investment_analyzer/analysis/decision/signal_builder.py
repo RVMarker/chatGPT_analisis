@@ -61,12 +61,18 @@ def build_decision_inputs(*, enriched: Mapping[str, Any], specialized: Mapping[s
         "macro": first(("macro_score", "macro", "macro_context_score")),
         "interest_rate_context": first(("interest_rate_context", "interest_rate_score", "rates_score")),
     }
-    confidence_inputs = {
-        "provider_quality": first(("provider_quality", "data_quality")) or 0.0,
-        "freshness": first(("freshness", "freshness_score")) or 0.0,
-        "consistency": first(("consistency", "consistency_score")) or 0.0,
-        "completeness": first(("completeness", "completeness_score")) or 0.0,
-        "technical_data_quality": first(("technical_data_quality", "technical_quality")) or 0.0,
-        "valuation_quality": _lookup({**dict(enriched), **dict(specialized)}, ("valuation_quality",)),
-    }
+    confidence_inputs = {}
+    for name, keys in {
+        "provider_quality": ("provider_quality", "data_quality"),
+        "freshness": ("freshness", "freshness_score"),
+        "consistency": ("consistency", "consistency_score"),
+        "completeness": ("completeness", "completeness_score"),
+        "technical_data_quality": ("technical_data_quality", "technical_quality"),
+    }.items():
+        value = first(keys)
+        if value is not None:
+            confidence_inputs[name] = value
+    valuation_quality = _lookup({**dict(enriched), **dict(specialized)}, ("valuation_quality",))
+    if valuation_quality is not None:
+        confidence_inputs["valuation_quality"] = valuation_quality
     return strategic, tactical, contextual, confidence_inputs
