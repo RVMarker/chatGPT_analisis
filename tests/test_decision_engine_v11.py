@@ -20,8 +20,8 @@ def _evaluate(score):
 
 
 def test_weights_sum_to_one():
-    assert sum(STRATEGIC.values()) == 1.0
-    assert sum(TACTICAL.values()) == 1.0
+    assert sum(STRATEGIC.values()) == pytest.approx(1.0)
+    assert sum(TACTICAL.values()) == pytest.approx(1.0)
 
 
 def test_all_strong_is_buy_on_both_horizons():
@@ -60,8 +60,8 @@ def test_breakdown_is_numeric_and_transparent():
         tactical_scores={"technical": 90, "sentiment": 50, "smart_money": 40},
         confidence_inputs=_confidence(),
     )
-    assert sum(x.weight for x in result.strategic_breakdown) == 1.0
-    assert sum(x.weight for x in result.tactical_breakdown) == 1.0
+    assert sum(x.weight for x in result.strategic_breakdown) == pytest.approx(1.0)
+    assert sum(x.weight for x in result.tactical_breakdown) == pytest.approx(1.0)
     assert result.strategic_score == 70.5
     assert result.tactical_score == 65.5
 
