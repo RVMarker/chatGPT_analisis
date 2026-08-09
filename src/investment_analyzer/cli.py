@@ -6,6 +6,7 @@ import argparse
 from investment_analyzer.app import attach_trade_plan, build_application
 from investment_analyzer.pipeline.decision_report import render_decision_report
 from investment_analyzer.pipeline.pipeline import AnalysisPipeline
+from investment_analyzer.pipeline.trade_plan_report import render_trade_plan
 
 # Backwards-compatible name retained for integrations that monkeypatch the
 # renderer at the CLI boundary.
@@ -43,6 +44,7 @@ def run_cli(
         max_position_pct=max_position_pct / 100.0,
     )
     print(format_decision_report(context))
+    print(render_trade_plan(context.trade_plan))
     return 0
 
 
