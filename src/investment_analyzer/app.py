@@ -13,6 +13,7 @@ from investment_analyzer.pipeline.production_modules import UnavailableModule, Y
 from investment_analyzer.pipeline.comparables_production import ProductionComparablesModule
 from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
+from investment_analyzer.pipeline.trade_plan_report import render_trade_plan
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
 from investment_analyzer.security.security_master import SecurityMaster
@@ -110,4 +111,5 @@ def run_application(ticker: str, capital=5000.0, risk_pct=0.02, max_position_pct
     context = pipeline.run(ticker)
     attach_trade_plan(context, capital=capital, risk_pct=risk_pct, max_position_pct=max_position_pct)
     print(render_decision_report(context))
+    print(render_trade_plan(context.trade_plan))
     return 0
