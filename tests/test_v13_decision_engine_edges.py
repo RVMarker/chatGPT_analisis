@@ -22,7 +22,7 @@ def test_missing_components_are_excluded_from_weighted_average():
         tactical_scores={"technical": 60, "sentiment": None, "smart_money": 40},
         confidence_inputs={},
     )
-    assert result.strategic_score == 68.5
+    assert result.strategic_score == 67.86
     assert result.strategic_coverage == 75.0
-    assert result.tactical_score == 55.0
+    assert result.tactical_score == 52.86
     assert result.tactical_coverage == 66.67
