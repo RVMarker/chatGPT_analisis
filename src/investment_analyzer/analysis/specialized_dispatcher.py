@@ -1,11 +1,11 @@
-"""V12.63 unified dispatcher for STOCK, ETF, REIT, FIBRA, CRYPTO and BOND."""
+"""V12.67 unified dispatcher for STOCK, ETF, REIT, FIBRA, CRYPTO and BOND."""
 from __future__ import annotations
 from typing import Any
 from investment_analyzer.analysis.stock_integration import StockAnalyzer
 from investment_analyzer.analysis.etf_analyzer import ETFAnalyzer
 from investment_analyzer.analysis.crypto_integration import CryptoAnalyzer
 from investment_analyzer.analysis.bond_integration import BondAnalyzer
-from investment_analyzer.analysis.reit_fibra_integration import REITFibraAnalyzer
+from investment_analyzer.analysis.reit_fibra_analyzer import REITFibraAnalyzer
 
 class SpecializedDispatcher:
     def __init__(self, *, stock=None, etf=None, reit_fibra=None, crypto=None, bond=None):
