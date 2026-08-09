@@ -23,13 +23,20 @@ class FinancialAnalysisIntegrator:
 
     @staticmethod
     def _growth_rates(historical_fcf: list[float], years: int = 5) -> tuple[list[float] | None, list[str]]:
+        """Build an explicit FCF forecast without suppressing legitimate growth.
+
+        Recent and long-history CAGR are blended 70/30. The explicit forecast
+        is capped at +20% / -2% to avoid pathological extrapolation while still
+        allowing a 20% historical CAGR to pass through unchanged. Terminal
+        growth is intentionally handled separately as a long-run assumption.
+        """
         values=[float(x) for x in historical_fcf if x is not None and float(x)>0]
         if len(values)<2: return None,["DCF no ejecutado: se requieren al menos 2 años de FCF positivo"]
         long_cagr=(values[-1]/values[0])**(1.0/(len(values)-1))-1.0
         recent=values[-4:] if len(values)>=4 else values
         recent_cagr=(recent[-1]/recent[0])**(1.0/(len(recent)-1))-1.0
-        raw_anchor=.70*recent_cagr+.30*long_cagr; anchor=max(-.02,min(.12,raw_anchor)); warnings=[]
-        if raw_anchor!=anchor: warnings.append("Crecimiento explícito de FCF limitado a [-2%, 12%] para evitar extrapolación extrema")
+        raw_anchor=.70*recent_cagr+.30*long_cagr; anchor=max(-.02,min(.20,raw_anchor)); warnings=[]
+        if raw_anchor!=anchor: warnings.append("Crecimiento explícito de FCF limitado a [-2%, 20%] para evitar extrapolación extrema")
         if len(values)>=4 and abs(recent_cagr-long_cagr)>.05: warnings.append("CAGR reciente y CAGR histórico difieren >5 pp; se utilizó mezcla 70/30")
         return [anchor*(1.0-.18*i) for i in range(years)],warnings
 
@@ -63,7 +70,6 @@ class FinancialAnalysisIntegrator:
             if terminal_growth is None and growth_rates is not None: terminal_growth=self.DEFAULT_TERMINAL_GROWTH; wacc_assumptions["terminal_growth_method"]="long_run_nominal_growth_default"
             fcf=cashflow.free_cash_flow
             interest=abs(float(income.interest_expense or 0.0)); pretax=float(income.pretax_income or 0.0); net_income=float(income.net_income or 0.0); tax_rate=1.0-net_income/pretax if pretax>0 and 0<=net_income<=pretax else .21; tax_rate=max(0.0,min(.35,tax_rate))
-            # Yahoo's conventional FCF is CFO-capex and is already after interest. Convert it to FCFF before using WACC and subtracting net debt.
             fcff=float(fcf)+interest*(1.0-tax_rate) if fcf is not None else None
             if fcff is not None and growth_rates is not None and wacc is not None and terminal_growth is not None and price.shares_outstanding:
                 base,bear,bull=self._scenarios(fcff,growth_rates,float(wacc),float(terminal_growth),debt,price.shares_outstanding,price.current); valuation=base.as_dict(); valuation.update({"available":base.fair_value_per_share is not None,"score":REITValuationEngine._score(base.margin_of_safety) if base.margin_of_safety is not None else None,"model":"FCFF_DCF","assumption_source":"historical_provider_data_plus_explicit_model_defaults","wacc_details":wacc_assumptions,"historical_fcf":list(getattr(cashflow,"historical_fcf",[])),"fcf_base_reported":fcf,"fcff_base":fcff,"fcff_conversion":{"method":"reported_FCF_plus_after_tax_interest","interest":interest,"tax_rate":tax_rate},"bear_case":bear.fair_value_per_share,"base_fair_value":base.fair_value_per_share,"bull_case":bull.fair_value_per_share,"fair_value_low":bear.fair_value_per_share,"fair_value_high":bull.fair_value_per_share,"scenario_assumptions":{"bear":{"growth_delta":-.03,"wacc_delta":.015,"terminal_delta":-.005},"bull":{"growth_delta":.02,"wacc_delta":-.010,"terminal_delta":.005}}}); valuation_warnings.extend(assumption_warnings); valuation_warnings.extend(base.warnings)
