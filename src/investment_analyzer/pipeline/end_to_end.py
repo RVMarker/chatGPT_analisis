@@ -1,4 +1,4 @@
-"""V12.88 end-to-end multi-asset investment pipeline with operational trade plan."""
+"""V12.90 end-to-end multi-asset investment pipeline with real decision scoring."""
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
@@ -10,6 +10,8 @@ from investment_analyzer.providers.acquisition_engine import MultiProviderAcquis
 from investment_analyzer.analysis.etf_analyzer import ETFAnalyzer
 from investment_analyzer.analysis.etf_scoring import ETFDecisionScorer
 from investment_analyzer.analysis.decision_integration import SpecializedDecisionIntegrator
+from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
+from investment_analyzer.analysis.decision.signal_builder import build_decision_inputs
 from investment_analyzer.analysis.reit_fibra_integration import REITFibraAnalyzer
 from investment_analyzer.analysis.crypto_analyzer import CryptoAnalyzer
 from investment_analyzer.analysis.crypto_valuation import CryptoValuation
@@ -25,10 +27,11 @@ class PipelineResult:
     def as_dict(self): return asdict(self)
 
 class InvestmentPipeline:
-    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None,crypto_analyzer=None,crypto_valuation=None,bond_analyzer=None,bond_valuation=None,risk_trade_plan=None,position_sizer=None,decision_quality_gate=None):
-        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router,identity_registry=self.identity); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer(); self.crypto_analyzer=crypto_analyzer or CryptoAnalyzer(); self.crypto_valuation=crypto_valuation or CryptoValuation(); self.bond_analyzer=bond_analyzer or BondAnalyzer(); self.bond_valuation=bond_valuation or BondValuation(); self.risk_trade_plan=risk_trade_plan or RiskTradePlan(); self.position_sizer=position_sizer or PositionSizer(); self.decision_quality_gate=decision_quality_gate or DecisionQualityGate()
+    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None,crypto_analyzer=None,crypto_valuation=None,bond_analyzer=None,bond_valuation=None,risk_trade_plan=None,position_sizer=None,decision_quality_gate=None,decision_engine=None):
+        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router,identity_registry=self.identity); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.decision_engine=decision_engine or DecisionEngine(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer(); self.crypto_analyzer=crypto_analyzer or CryptoAnalyzer(); self.crypto_valuation=crypto_valuation or CryptoValuation(); self.bond_analyzer=bond_analyzer or BondAnalyzer(); self.bond_valuation=bond_valuation or BondValuation(); self.risk_trade_plan=risk_trade_plan or RiskTradePlan(); self.position_sizer=position_sizer or PositionSizer(); self.decision_quality_gate=decision_quality_gate or DecisionQualityGate()
     @staticmethod
     def _decision(score,coverage,confidence):
+        if score is None:return "N/D"
         if coverage<60 or confidence<50:return "MANTENER"
         if score>=80:return "COMPRAR"
         if score>=65:return "ACUMULAR"
@@ -63,7 +66,21 @@ class InvestmentPipeline:
         if classification.confidence<70:warnings.append("Clasificación de activo con confianza inferior a 70%")
         if blocked:warnings.append("Datos críticos bloqueados por falta de consenso: "+", ".join(blocked))
         if missing:warnings.append("Datos requeridos ausentes: "+", ".join(missing))
-        warnings.extend(specialized_warnings); strategic_conf=quality*(float(strategic_coverage)/100); tactical_conf=quality*(float(tactical_coverage)/100); decision={"strategic":{"score":strategic_score,"coverage":strategic_coverage,"confidence":round(strategic_conf,2),"verdict":self._decision(float(strategic_score if strategic_score is not None else 50),float(strategic_coverage),strategic_conf)},"tactical":{"score":tactical_score,"coverage":tactical_coverage,"confidence":round(tactical_conf,2),"verdict":self._decision(float(tactical_score if tactical_score is not None else 50),float(tactical_coverage),tactical_conf)}}
+        warnings.extend(specialized_warnings)
+
+        # V12.90: the DecisionEngine is now the sole generic strategic/tactical scorer.
+        # Explicit legacy aggregate scores are accepted only as compatibility overrides;
+        # otherwise component scores must come from real analysis/enriched/specialized data.
+        strategic_inputs,tactical_inputs,contextual,confidence_inputs=build_decision_inputs(enriched=enriched,specialized=specialized,analysis=analysis or {})
+        if strategic_score is not None and not any(v is not None for v in strategic_inputs.values()):
+            strategic_inputs={"fundamental":None,"valuation":None,"technical":None,"risk":None,"legacy_score":strategic_score}
+        if tactical_score is not None and not any(v is not None for v in tactical_inputs.values()):
+            tactical_inputs={"technical":None,"sentiment":None,"smart_money":None,"legacy_score":tactical_score}
+        # Legacy aggregate scores are deliberately not injected as a voting component.
+        # They remain available in the raw request for backward compatibility only.
+        confidence_inputs.setdefault("provider_quality",quality); confidence_inputs.setdefault("freshness",quality); confidence_inputs.setdefault("consistency",quality); confidence_inputs.setdefault("completeness",completeness); confidence_inputs.setdefault("technical_data_quality",quality)
+        engine_result=self.decision_engine.evaluate(strategic_inputs,tactical_inputs,confidence_inputs,red_flags=warnings,contextual=contextual)
+        decision={"strategic":{"score":engine_result.strategic_score,"coverage":engine_result.strategic_coverage,"confidence":round(engine_result.confidence,2),"verdict":engine_result.strategic_decision,"breakdown":[x.as_dict() for x in engine_result.strategic_breakdown]},"tactical":{"score":engine_result.tactical_score,"coverage":engine_result.tactical_coverage,"confidence":round(engine_result.confidence,2),"verdict":engine_result.tactical_decision,"breakdown":[x.as_dict() for x in engine_result.tactical_breakdown]},"contextual":engine_result.contextual,"decision_trail":engine_result.decision_trail,"decisive_factors":engine_result.decisive_factors,"missing_factors":engine_result.missing_factors}
         if final_asset=="ETF" and "etf" in specialized: decision["strategic"]=self.decision_integrator.integrate(asset_type="ETF",strategic=decision["strategic"],specialized=specialized)
         elif final_asset in {"REIT","FIBRA"} and "reit_fibra" in specialized:
             rf=specialized["reit_fibra"]; decision["strategic"].update({"generic_score":decision["strategic"].get("score"),"score":rf["score"],"coverage":rf["coverage"],"specialized_component":"REIT_FIBRA","specialized_score":rf["score"],"specialized_coverage":rf["coverage"],"decision_basis":"REIT/FIBRA FFO-AFFO-NAV valuation"}); decision["strategic"]["verdict"]=self._decision(float(rf["score"]),float(rf["coverage"]),float(quality)*float(rf["coverage"])/100); decision["strategic"]["confidence"]=round(float(quality)*float(rf["coverage"])/100,2)
@@ -71,11 +88,7 @@ class InvestmentPipeline:
             cd=specialized["crypto_decision"]; decision["strategic"].update({"score":cd.get("strategic_score"),"coverage":cd.get("coverage",0),"verdict":cd.get("strategic_verdict") or "MANTENER","specialized_component":"CRYPTO","decision_basis":"Crypto liquidity/risk/relative valuation"}); decision["tactical"].update({"score":cd.get("tactical_score"),"coverage":cd.get("coverage",0),"verdict":cd.get("tactical_verdict") or "MANTENER","specialized_component":"CRYPTO","decision_basis":"Crypto momentum/liquidity"})
         elif final_asset=="BOND" and "bond_decision" in specialized:
             bd=specialized["bond_decision"]; decision["strategic"].update({"score":bd.get("relative_value_score"),"coverage":bd.get("coverage",0),"verdict":bd.get("strategic_verdict") or "MANTENER","specialized_component":"BOND","decision_basis":"Bond yield/price/duration/credit/liquidity"})
-        price=self._first_value(acquisition,enriched,"price","current_price","last_price")
-        fair_value=self._first_value(acquisition,enriched,"fair_value_per_share","fair_value","intrinsic_value","target_price")
-        support=self._first_value(acquisition,enriched,"technical_support","support","support_1")
-        resistance=self._first_value(acquisition,enriched,"technical_resistance","resistance","resistance_1")
-        atr=self._first_value(acquisition,enriched,"atr","ATR")
+        price=self._first_value(acquisition,enriched,"price","current_price","last_price"); fair_value=self._first_value(acquisition,enriched,"fair_value_per_share","fair_value","intrinsic_value","target_price"); support=self._first_value(acquisition,enriched,"technical_support","support","support_1"); resistance=self._first_value(acquisition,enriched,"technical_resistance","resistance","resistance_1"); atr=self._first_value(acquisition,enriched,"atr","ATR")
         if fair_value is None:
             for source in (specialized.get("reit_fibra"),specialized.get("crypto_decision"),specialized.get("bond_decision"),specialized.get("etf")):
                 if isinstance(source,dict): fair_value=self._first_value(type("A",(),{"fields":{}})(),source,"fair_value_per_share","fair_value","intrinsic_value","target_price") or fair_value
