@@ -114,5 +114,5 @@ def run_application(ticker: str, capital=5000.0, risk_pct=0.02, max_position_pct
     context = pipeline.run(ticker)
     attach_trade_plan(context, capital=capital, risk_pct=risk_pct, max_position_pct=max_position_pct)
     print(render_decision_report(context))
-    print(render_trade_plan(context.trade_plan))
+    print(render_trade_plan(context.trade_plan, context.metadata.get("final_decision")))
     return 0
