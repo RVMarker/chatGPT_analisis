@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Mapping
 
+from investment_analyzer.analysis.decision.final_decision import finalize_decision
+from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
 from investment_analyzer.pipeline.decision_module import DecisionModule
 from investment_analyzer.pipeline.decision_report import render_decision_report
 from investment_analyzer.pipeline.financial_data_loader import FinancialDataLoader
@@ -17,7 +19,6 @@ from investment_analyzer.pipeline.trade_plan_report import render_trade_plan
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
 from investment_analyzer.security.security_master import SecurityMaster
-from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
 
 
 @dataclass(slots=True)
@@ -103,6 +104,8 @@ def attach_trade_plan(context, capital=5000.0, risk_pct=0.02, max_position_pct=0
         risk_pct=risk_pct,
         max_position_pct=max_position_pct,
     )
+    strategic = getattr(context.decision, "strategic_decision", None)
+    context.metadata["final_decision"] = finalize_decision(strategic, context.trade_plan)
     return context.trade_plan
 
 
