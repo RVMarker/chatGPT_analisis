@@ -3,8 +3,21 @@
 All scoring, scenario handling, trade planning and final decision logic lives
 in the production application path. This file only collects interactive CLI
 parameters so there is one source of truth for investment decisions.
+
+The source checkout is supported as well as an editable installation: when
+called directly from the repository root, ``src`` is added to ``sys.path`` so
+users do not get a misleading ``investment_analyzer`` import error before
+installation.
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
+if SRC.is_dir() and str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from investment_analyzer.app import run_application
 
