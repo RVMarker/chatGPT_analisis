@@ -1,4 +1,4 @@
-"""Regression tests for the V11 decision engine."""
+"""Regression tests for the V12 decision engine."""
 
 import pytest
 
@@ -13,7 +13,7 @@ def _confidence(value=100):
 def _evaluate(score):
     engine = DecisionEngine()
     return engine.evaluate(
-        strategic_scores={"fundamental": score, "valuation": score, "risk": score},
+        strategic_scores={"fundamental": score, "valuation": score, "technical": score, "risk": score},
         tactical_scores={"technical": score, "sentiment": score, "smart_money": score},
         confidence_inputs=_confidence(),
     )
@@ -37,7 +37,7 @@ def test_all_strong_is_buy_on_both_horizons():
 
 def test_macro_and_comparables_do_not_vote():
     engine = DecisionEngine()
-    strategic = {"fundamental": 70, "valuation": 70, "risk": 70}
+    strategic = {"fundamental": 70, "valuation": 70, "technical": 70, "risk": 70}
     tactical = {"technical": 70, "sentiment": 70, "smart_money": 70}
     low_context = engine.evaluate(strategic, tactical, _confidence(), contextual={"comparables": 0, "macro": 0})
     high_context = engine.evaluate(strategic, tactical, _confidence(), contextual={"comparables": 100, "macro": 100})
@@ -56,14 +56,14 @@ def test_neutral_inputs_are_hold():
 def test_breakdown_is_numeric_and_transparent():
     engine = DecisionEngine()
     result = engine.evaluate(
-        strategic_scores={"fundamental": 80, "valuation": 60, "risk": 70},
+        strategic_scores={"fundamental": 80, "valuation": 60, "technical": 70, "risk": 70},
         tactical_scores={"technical": 90, "sentiment": 50, "smart_money": 40},
         confidence_inputs=_confidence(),
     )
     assert sum(x.weight for x in result.strategic_breakdown) == 1.0
     assert sum(x.weight for x in result.tactical_breakdown) == 1.0
-    assert result.strategic_score == 70
-    assert result.tactical_score == 72
+    assert result.strategic_score == 70.5
+    assert result.tactical_score == 65.5
 
 
 def test_exact_decision_thresholds_are_stable():
@@ -81,34 +81,36 @@ def test_exact_decision_thresholds_are_stable():
 def test_missing_components_are_excluded_and_weights_renormalized():
     engine = DecisionEngine()
     result = engine.evaluate(
-        strategic_scores={"fundamental": 100, "valuation": None, "risk": 0},
+        strategic_scores={"fundamental": 100, "valuation": None, "technical": None, "risk": 0},
         tactical_scores={"technical": 100, "sentiment": None, "smart_money": 0},
         confidence_inputs=_confidence(),
     )
-    assert result.strategic_score == 66.67
+    assert result.strategic_score == 70.0
     assert result.tactical_score == 75.0
-    assert result.strategic_decision == "MANTENER"
+    assert result.strategic_decision == "ACUMULAR"
     assert result.tactical_decision == "ACUMULAR"
     assert result.strategic_sufficient is True
     assert result.tactical_sufficient is True
-    assert result.strategic_coverage == pytest.approx(66.67)
+    assert result.strategic_coverage == pytest.approx(50.0)
     assert result.tactical_coverage == pytest.approx(66.67)
-    assert result.strategic_breakdown[0].weight == pytest.approx(2 / 3)
+    assert result.strategic_breakdown[0].weight == pytest.approx(0.7)
     assert result.strategic_breakdown[1].available is False
+    assert result.strategic_breakdown[1].weight == 0.0
     assert result.tactical_breakdown[0].weight == pytest.approx(0.75)
     assert result.tactical_breakdown[1].available is False
+    assert result.tactical_breakdown[1].weight == 0.0
 
 
 def test_single_strategic_component_is_a_signal_not_a_robust_conclusion():
     engine = DecisionEngine()
     result = engine.evaluate(
-        strategic_scores={"fundamental": 33.26, "valuation": None, "risk": None},
+        strategic_scores={"fundamental": 33.26, "valuation": None, "technical": None, "risk": None},
         tactical_scores={"technical": 32.25, "sentiment": None, "smart_money": 57.81},
         confidence_inputs=_confidence(),
     )
     assert result.strategic_score == 33.26
     assert result.strategic_decision == "VENDER"
-    assert result.strategic_coverage == pytest.approx(33.33)
+    assert result.strategic_coverage == pytest.approx(25.0)
     assert result.strategic_sufficient is False
     assert any("Cobertura estratégica insuficiente" in flag for flag in result.red_flags)
     assert result.tactical_sufficient is True
@@ -117,7 +119,7 @@ def test_single_strategic_component_is_a_signal_not_a_robust_conclusion():
 def test_no_available_evidence_returns_no_decision():
     engine = DecisionEngine()
     result = engine.evaluate(
-        strategic_scores={"fundamental": None, "valuation": None, "risk": None},
+        strategic_scores={"fundamental": None, "valuation": None, "technical": None, "risk": None},
         tactical_scores={"technical": None, "sentiment": None, "smart_money": None},
         confidence_inputs=_confidence(),
     )
