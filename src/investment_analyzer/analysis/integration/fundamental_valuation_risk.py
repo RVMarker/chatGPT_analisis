@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from investment_analyzer.analysis.fundamental.fundamental_engine import FundamentalEngine
 from investment_analyzer.analysis.risk.risk_engine import RiskEngine
-from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine, DCFResult
+from investment_analyzer.analysis.valuation.dcf_engine import DCFEngine
 from investment_analyzer.analysis.valuation.reit_engine import REITValuationEngine
 from investment_analyzer.common.models import FinancialStatements, PriceData
 
@@ -24,13 +24,30 @@ class FinancialAnalysisIntegrator:
 
     @staticmethod
     def _growth_rates(historical_fcf: list[float], years: int = 5) -> tuple[list[float] | None, list[str]]:
+        """Build a conservative forecast from provider FCF history.
+
+        The previous implementation used the full-history CAGR and then faded it
+        into a negative terminal growth rate for mature companies. That can
+        mechanically crush intrinsic value. We now blend the recent and full
+        history CAGR, cap the explicit forecast, and let terminal growth be a
+        separate long-run assumption.
+        """
         values = [float(x) for x in historical_fcf if x is not None and float(x) > 0]
         if len(values) < 2:
             return None, ["DCF no ejecutado: se requieren al menos 2 años de FCF positivo"]
-        first, last = values[0], values[-1]
-        cagr = (last / first) ** (1.0 / (len(values) - 1)) - 1.0
-        anchor = max(-0.05, min(0.20, cagr))
-        warnings = [] if abs(cagr - anchor) <= 1e-9 else ["CAGR histórico de FCF limitado a [-5%, 20%] para evitar extrapolación extrema"]
+        long_cagr = (values[-1] / values[0]) ** (1.0 / (len(values) - 1)) - 1.0
+        if len(values) >= 4:
+            recent = values[-4:]
+            recent_cagr = (recent[-1] / recent[0]) ** (1.0 / (len(recent) - 1)) - 1.0
+        else:
+            recent_cagr = long_cagr
+        raw_anchor = 0.70 * recent_cagr + 0.30 * long_cagr
+        anchor = max(-0.02, min(0.12, raw_anchor))
+        warnings = []
+        if raw_anchor != anchor:
+            warnings.append("Crecimiento explícito de FCF limitado a [-2%, 12%] para evitar extrapolación extrema")
+        if len(values) >= 4 and abs(recent_cagr - long_cagr) > 0.05:
+            warnings.append("CAGR reciente y CAGR histórico difieren >5 pp; se utilizó mezcla 70/30")
         return [anchor * (1.0 - 0.18 * i) for i in range(years)], warnings
 
     @classmethod
@@ -56,9 +73,9 @@ class FinancialAnalysisIntegrator:
 
     def _scenarios(self, fcf, growth_rates, wacc, terminal_growth, debt, shares, price):
         base = self.valuation.calculate(fcf, growth_rates, wacc, terminal_growth, debt, shares, price)
-        bear = self.valuation.calculate(fcf, [max(-0.10, g - 0.03) for g in growth_rates], min(0.25, wacc + 0.015), max(-0.01, terminal_growth - 0.005), debt, shares, price)
+        bear = self.valuation.calculate(fcf, [max(-0.08, g - 0.03) for g in growth_rates], min(0.25, wacc + 0.015), max(0.005, terminal_growth - 0.005), debt, shares, price)
         bull_wacc = max(terminal_growth + 0.015, wacc - 0.010)
-        bull = self.valuation.calculate(fcf, [min(0.25, g + 0.02) for g in growth_rates], bull_wacc, min(0.035, terminal_growth + 0.005), debt, shares, price)
+        bull = self.valuation.calculate(fcf, [min(0.18, g + 0.02) for g in growth_rates], bull_wacc, min(0.035, terminal_growth + 0.005), debt, shares, price)
         return base, bear, bull
 
     def run(self, statements: FinancialStatements, price: PriceData, *, growth_rates=None, wacc=None, terminal_growth=None, net_debt=None, asset_type=None, reit_required_yield=.09, reit_growth=.03, risk_free_rate=None):
@@ -85,9 +102,10 @@ class FinancialAnalysisIntegrator:
             if wacc is None and growth_rates is not None: wacc, wacc_assumptions = self._derive_wacc(statements, price, risk_free_rate)
             else: wacc_assumptions = {"method":"explicit"}
             if terminal_growth is None and growth_rates is not None:
-                terminal_growth = min(self.DEFAULT_TERMINAL_GROWTH, max(-0.01, float(growth_rates[-1]) * 0.5))
-                terminal_growth = max(-0.01, min(0.03, terminal_growth))
-                wacc_assumptions["terminal_growth_method"]="conservative_fade_of_historical_FCF_growth"
+                # Terminal growth is a long-run economic assumption, not a direct
+                # continuation of the last noisy FCF growth observation.
+                terminal_growth = self.DEFAULT_TERMINAL_GROWTH
+                wacc_assumptions["terminal_growth_method"]="long_run_nominal_growth_default"
             fcf=cashflow.free_cash_flow
             if fcf is not None and growth_rates is not None and wacc is not None and terminal_growth is not None and price.shares_outstanding:
                 base, bear, bull = self._scenarios(float(fcf), growth_rates, float(wacc), float(terminal_growth), debt, price.shares_outstanding, price.current)
