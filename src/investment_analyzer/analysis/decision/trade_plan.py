@@ -34,12 +34,10 @@ def build_trade_plan(*, price, fair_value=None, bear_value=None, bull_value=None
         target_2 = min(target_2, bull)
 
     risk_per_unit = price - stop_loss if stop_loss else None
+    # Target 1 is deliberately a real market resistance. We do not manufacture
+    # a synthetic 1R target just to make the Quality Gate pass.
     target_1 = resistance if resistance and resistance > price else None
-    if target_1 is None and risk_per_unit and target_2 and price + risk_per_unit < target_2:
-        target_1 = price + risk_per_unit
-        target_1_method = "1R"
-    else:
-        target_1_method = "20_period_resistance" if target_1 else None
+    target_1_method = "20_period_resistance" if target_1 else None
     if target_1 and target_2 and target_1 >= target_2:
         target_1 = None
         target_1_method = None
