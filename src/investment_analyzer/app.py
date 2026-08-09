@@ -1,7 +1,8 @@
-"""Production composition root for the V11 analyzer."""
+"""Production composition root for the V12 analyzer."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Mapping
 
 from investment_analyzer.pipeline.decision_module import DecisionModule
 from investment_analyzer.pipeline.decision_report import render_decision_report
@@ -14,6 +15,7 @@ from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
+from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
 
 
 @dataclass(slots=True)
@@ -29,7 +31,6 @@ class ModuleBundle:
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
-    """Build the production stack used by the CLI."""
     registry, manager = build_provider_stack(yahoo_provider=yahoo_provider, fmp_provider=fmp_provider, symbol_mappings=symbol_mappings)
     data_loader = FinancialDataLoader(provider_manager=manager)
     modules = ModuleBundle(
@@ -46,8 +47,52 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
     return pipeline, manager, registry
 
 
-def run_application(ticker: str, **kwargs) -> int:
+def _find_number(value, names):
+    wanted = {str(x).lower() for x in names}
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if str(key).lower() in wanted:
+                try:
+                    number = float(item)
+                    if number > 0:
+                        return number
+                except (TypeError, ValueError):
+                    pass
+        for item in value.values():
+            found = _find_number(item, wanted)
+            if found is not None:
+                return found
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found = _find_number(item, wanted)
+            if found is not None:
+                return found
+    return None
+
+
+def attach_trade_plan(context, capital=5000.0, risk_pct=0.02, max_position_pct=0.25):
+    price_data = context.price
+    price = getattr(price_data, "current", None) if price_data is not None else None
+    valuation = context.valuation or {}
+    technical = context.technical or {}
+    context.trade_plan = build_trade_plan(
+        price=price,
+        fair_value=_find_number(valuation, ("fair_value_per_share", "fair_value", "intrinsic_value")),
+        bear_value=_find_number(valuation, ("bear_value", "bear_case", "bear_fair_value")),
+        bull_value=_find_number(valuation, ("bull_value", "bull_case", "bull_fair_value")),
+        support=_find_number(technical, ("support", "support_level", "nearest_support")),
+        resistance=_find_number(technical, ("resistance", "resistance_level", "nearest_resistance")),
+        atr=_find_number(technical, ("atr", "atr14", "average_true_range")),
+        capital=capital,
+        risk_pct=risk_pct,
+        max_position_pct=max_position_pct,
+    )
+    return context.trade_plan
+
+
+def run_application(ticker: str, capital=5000.0, risk_pct=0.02, max_position_pct=0.25, **kwargs) -> int:
     pipeline, _, _ = build_application(**kwargs)
     context = pipeline.run(ticker)
+    attach_trade_plan(context, capital=capital, risk_pct=risk_pct, max_position_pct=max_position_pct)
     print(render_decision_report(context))
     return 0
