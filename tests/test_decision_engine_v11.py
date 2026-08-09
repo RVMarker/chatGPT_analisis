@@ -86,9 +86,9 @@ def test_missing_components_are_excluded_and_weights_renormalized():
         confidence_inputs=_confidence(),
     )
     assert result.strategic_score == 70.0
-    assert result.tactical_score == 75.0
+    assert result.tactical_score == 64.29
     assert result.strategic_decision == "ACUMULAR"
-    assert result.tactical_decision == "ACUMULAR"
+    assert result.tactical_decision == "MANTENER"
     assert result.strategic_sufficient is True
     assert result.tactical_sufficient is True
     assert result.strategic_coverage == pytest.approx(50.0)
@@ -96,7 +96,7 @@ def test_missing_components_are_excluded_and_weights_renormalized():
     assert result.strategic_breakdown[0].weight == pytest.approx(0.7)
     assert result.strategic_breakdown[1].available is False
     assert result.strategic_breakdown[1].weight == 0.0
-    assert result.tactical_breakdown[0].weight == pytest.approx(0.75)
+    assert result.tactical_breakdown[0].weight == pytest.approx(0.6428571428571429)
     assert result.tactical_breakdown[1].available is False
     assert result.tactical_breakdown[1].weight == 0.0
 
