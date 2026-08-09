@@ -1,4 +1,4 @@
-name: V11 tests
+name: V12 tests
 
 on:
   push:
@@ -9,23 +9,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m pip install pytest
-      - name: Run lightweight V11 smoke test
+          python -m pip install -e ".[test]"
+      - name: Run V12 smoke test
         env:
           PYTHONPATH: src
         run: python scripts/ci_smoke_test.py
-      - name: Run V11 regression tests
+      - name: Run full regression tests
         env:
           PYTHONPATH: src
         run: python -m pytest -q
