@@ -1,4 +1,4 @@
-"""V12.85 end-to-end multi-asset investment pipeline with operational trade plan."""
+"""V12.88 end-to-end multi-asset investment pipeline with operational trade plan."""
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
@@ -16,16 +16,17 @@ from investment_analyzer.analysis.crypto_valuation import CryptoValuation
 from investment_analyzer.analysis.bond_analyzer import BondAnalyzer
 from investment_analyzer.analysis.bond_valuation import BondValuation
 from investment_analyzer.analysis.risk_trade_plan import RiskTradePlan
+from investment_analyzer.analysis.position_sizing import PositionSizer
 from investment_analyzer.analysis.decision_quality_gate import DecisionQualityGate
 
 @dataclass(slots=True)
 class PipelineResult:
-    identity:dict[str,Any]; classification:dict[str,Any]; route:dict[str,Any]; acquisition:dict[str,Any]; specialized_analysis:dict[str,Any]; consensus:dict[str,dict[str,Any]]; analysis:dict[str,Any]; decision:dict[str,Any]; quality:dict[str,Any]; warnings:list[str]
+    identity:dict[str,Any]; classification:dict[str,Any]; route:dict[str,Any]; acquisition:dict[str,Any]; specialized_analysis:dict[str,Any]; consensus:dict[str,dict[str,Any]]; analysis:dict[str,Any]; decision:dict[str,Any]; quality:dict[str,Any]; warnings:list[str]; position_sizing:dict[str,Any]|None=None
     def as_dict(self): return asdict(self)
 
 class InvestmentPipeline:
-    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None,crypto_analyzer=None,crypto_valuation=None,bond_analyzer=None,bond_valuation=None,risk_trade_plan=None,decision_quality_gate=None):
-        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router,identity_registry=self.identity); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer(); self.crypto_analyzer=crypto_analyzer or CryptoAnalyzer(); self.crypto_valuation=crypto_valuation or CryptoValuation(); self.bond_analyzer=bond_analyzer or BondAnalyzer(); self.bond_valuation=bond_valuation or BondValuation(); self.risk_trade_plan=risk_trade_plan or RiskTradePlan(); self.decision_quality_gate=decision_quality_gate or DecisionQualityGate()
+    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None,crypto_analyzer=None,crypto_valuation=None,bond_analyzer=None,bond_valuation=None,risk_trade_plan=None,position_sizer=None,decision_quality_gate=None):
+        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router,identity_registry=self.identity); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer(); self.crypto_analyzer=crypto_analyzer or CryptoAnalyzer(); self.crypto_valuation=crypto_valuation or CryptoValuation(); self.bond_analyzer=bond_analyzer or BondAnalyzer(); self.bond_valuation=bond_valuation or BondValuation(); self.risk_trade_plan=risk_trade_plan or RiskTradePlan(); self.position_sizer=position_sizer or PositionSizer(); self.decision_quality_gate=decision_quality_gate or DecisionQualityGate()
     @staticmethod
     def _decision(score,coverage,confidence):
         if coverage<60 or confidence<50:return "MANTENER"
@@ -46,7 +47,7 @@ class InvestmentPipeline:
                 value=row.get("value") if isinstance(row,dict) else None
                 if isinstance(value,(int,float)) and value>0:return float(value)
         return None
-    def run(self,*,symbol,asset_type=None,isin=None,country=None,exchange=None,currency=None,provider_symbols=None,aliases=(),provider_metadata=None,consensus_data=None,analysis=None,strategic_score=None,strategic_coverage=0,tactical_score=None,tactical_coverage=0,data_quality=100.0,fetchers=None):
+    def run(self,*,symbol,asset_type=None,isin=None,country=None,exchange=None,currency=None,provider_symbols=None,aliases=(),provider_metadata=None,consensus_data=None,analysis=None,strategic_score=None,strategic_coverage=0,tactical_score=None,tactical_coverage=0,data_quality=100.0,fetchers=None,capital=5000.0,risk_pct=0.02,max_position_pct=0.25,lot_size=1):
         md=provider_metadata or {}; classification=self.classifier.classify(symbol,provider_asset_type=asset_type,quote_type=md.get("quote_type"),description=md.get("description"),metadata=md); final_asset=classification.asset_type if asset_type is None else self.identity.normalize_asset_type(asset_type); route=self.router.plan(final_asset,symbol); ident=self.identity.register(asset_type=final_asset,symbol=symbol,isin=isin,country=country,exchange=exchange,currency=currency,provider_symbols=provider_symbols,aliases=aliases,metadata=md); acquisition=self.acquisition.acquire(symbol=symbol,asset_type=final_asset,fetchers=fetchers or {},identity=ident); specialized={}; specialized_warnings=[]; enriched=self._enriched(acquisition)
         if final_asset=="ETF":
             canonical={k:enriched.get(k) for k in ("price","expense_ratio","benchmark","aum","holdings","tracking_difference","tracking_error","trackingDifference","trackingError","category_median_expense_ratio","yield","distribution_yield")}; canonical["price"]=canonical.get("price") or self._first_value(acquisition,enriched,"price"); etf=self.etf_analyzer.analyze(symbol,canonical); etf_dict=etf.as_dict(); score=self.etf_scorer.score(etf_dict,data_quality); etf_dict.update({"score":score.score,"score_components":score.components,"score_coverage":score.coverage,"score_warnings":score.warnings}); specialized={"etf":etf_dict}; specialized_warnings=(etf.warnings or [])+(score.warnings or [])
@@ -77,10 +78,10 @@ class InvestmentPipeline:
         atr=self._first_value(acquisition,enriched,"atr","ATR")
         if fair_value is None:
             for source in (specialized.get("reit_fibra"),specialized.get("crypto_decision"),specialized.get("bond_decision"),specialized.get("etf")):
-                if isinstance(source,dict):
-                    fair_value=self._first_value(type("A",(),{"fields":{}})(),source,"fair_value_per_share","fair_value","intrinsic_value","target_price") or fair_value
+                if isinstance(source,dict): fair_value=self._first_value(type("A",(),{"fields":{}})(),source,"fair_value_per_share","fair_value","intrinsic_value","target_price") or fair_value
         trade=self.risk_trade_plan.build(price=price,fair_value=fair_value,technical_support=support,technical_resistance=resistance,atr=atr)
+        sizing=self.position_sizer.calculate(capital=float(capital),entry=float(price) if price else 0,stop_loss=float(trade.get("stop_loss")) if trade.get("stop_loss") else 0,risk_pct=float(risk_pct),max_position_pct=float(max_position_pct),lot_size=int(lot_size)) if price and trade.get("stop_loss") else {"status":"INSUFFICIENT_DATA","units":0,"risk_budget":float(capital)*float(risk_pct)}
         strategic=decision["strategic"]; tactical=decision["tactical"]; mos=(fair_value/price-1.0) if price and fair_value else None
         gate=self.decision_quality_gate.evaluate(strategic_verdict=strategic.get("verdict"),tactical_verdict=tactical.get("verdict"),score=strategic.get("score"),fair_value=fair_value,price=price,risk_reward=trade.get("risk_reward"),margin_of_safety=mos,data_coverage=quality)
-        decision["trade_plan"]=trade; decision["quality_gate"]=gate; decision["operational_verdict"]=gate.get("operation"); decision["entry_price"]=price; decision["fair_value"]=fair_value; decision["stop_loss"]=trade.get("stop_loss"); decision["target_1"]=trade.get("target_1"); decision["target_2"]=trade.get("target_2"); decision["risk_reward"]=trade.get("risk_reward")
-        return PipelineResult(ident.as_dict(),classification.as_dict(),route,acquisition.as_dict(),specialized,{k:r.as_dict() for k,r in consensus.items()},analysis or {},decision,{"data_quality":round(quality,2),"consensus_quality":round(cq,2),"completeness":round(completeness,2),"blocked_fields":blocked,"missing_required":missing},warnings)
+        decision["trade_plan"]=trade; decision["position_sizing"]=sizing; decision["quality_gate"]=gate; decision["operational_verdict"]=gate.get("operation"); decision["entry_price"]=price; decision["fair_value"]=fair_value; decision["stop_loss"]=trade.get("stop_loss"); decision["target_1"]=trade.get("target_1"); decision["target_2"]=trade.get("target_2"); decision["risk_reward"]=trade.get("risk_reward")
+        return PipelineResult(ident.as_dict(),classification.as_dict(),route,acquisition.as_dict(),specialized,{k:r.as_dict() for k,r in consensus.items()},analysis or {},decision,{"data_quality":round(quality,2),"consensus_quality":round(cq,2),"completeness":round(completeness,2),"blocked_fields":blocked,"missing_required":missing},warnings,sizing)
