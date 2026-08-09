@@ -82,12 +82,15 @@ class DecisionModule:
                 consistency = max(0.0, min(100.0, float(raw_consistency)))
             except (TypeError, ValueError):
                 consistency = None
+        valuation = getattr(context, "valuation", {}) or {}
+        valuation_quality = valuation.get("valuation_quality") if isinstance(valuation, dict) else None
         return {
             "provider_quality": score_provider_quality(provider_data),
             "freshness": freshness,
             "consistency": consistency,
             "completeness": completeness,
             "technical_data_quality": DecisionModule._technical_quality(context),
+            "valuation_quality": valuation_quality,
         }
 
     def run(self, context):
