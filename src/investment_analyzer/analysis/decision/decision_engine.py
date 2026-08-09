@@ -29,7 +29,7 @@ class ScoreComponent:
     def contribution_pct(self) -> float:
         return self.weighted
 
-    def as_dict(self) -> dict[str, object]:
+    def as_dict(self):
         return {"name": self.name, "score": round(self.score, 2) if self.score is not None else None,
                 "weight": round(self.weight, 4), "weighted_contribution": round(self.weighted, 2),
                 "contribution_pct": round(self.contribution_pct, 2), "explanation": self.explanation,
@@ -153,8 +153,10 @@ class DecisionEngine:
 
     @staticmethod
     def print_summary(result):
+        strategic = f"{result.strategic_score:.2f}/100" if result.strategic_score is not None else "N/D"
+        tactical = f"{result.tactical_score:.2f}/100" if result.tactical_score is not None else "N/D"
         print("=" * 80); print("DECISION ENGINE V11"); print("=" * 80)
-        print(f"Estratégico (años): {result.strategic_decision} | {result.strategic_score:.2f}/100")
-        print(f"Táctico (semanas):  {result.tactical_decision} | {result.tactical_score:.2f}/100")
+        print(f"Estratégico (años): {result.strategic_decision} | {strategic}")
+        print(f"Táctico (semanas):  {result.tactical_decision} | {tactical}")
         print(f"Confianza:          {result.confidence:.1f}%")
         print(f"Cobertura señales:  {result.data_coverage:.1f}%")
