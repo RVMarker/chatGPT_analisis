@@ -99,7 +99,7 @@ class DecisionEngine:
 
     @staticmethod
     def _normalize_weight(weight, total):
-        return float(Decimal(str(weight)) / Decimal(str(total)))
+        return round(float(Decimal(str(weight)) / Decimal(str(total))), 10)
 
     def _weighted(self, data: Mapping[str, object], weights: Mapping[str, float]):
         items = []
@@ -125,7 +125,7 @@ class DecisionEngine:
                 item.weight = self._normalize_weight(item.weight, total_weight)
             else:
                 item.weight = 0.0
-        return sum(item.weighted for item in available_items), items, []
+        return round(sum(item.weighted for item in available_items), 2), items, []
 
     @staticmethod
     def _coverage(items):
@@ -160,16 +160,12 @@ class DecisionEngine:
         total_weight = sum(w for _, w in available)
         quality = sum(v * w for v, w in available) / total_weight
         evidence_coverage = total_weight
-
-        # Optional modifiers only participate when real values are supplied;
-        # their absence is not treated as a negative or a fabricated score.
         technical = DecisionEngine._quality_score(technical_data_quality)
         if technical is not None:
             quality = quality * 0.90 + technical * 0.10
         valuation = DecisionEngine._quality_score(valuation_quality)
         if valuation is not None:
             quality = quality * 0.90 + valuation * 0.10
-
         decision_coverage = max(0.0, min(100.0, float(coverage))) / 100.0
         return round(quality * evidence_coverage * decision_coverage, 2)
 
@@ -208,8 +204,8 @@ class DecisionEngine:
         if coverage < 100:
             flags.append(f"Cobertura de señales decisorias: {coverage:.1f}%")
         return DecisionResult(
-            round(strategic_total, 2) if strategic_total is not None else None,
-            round(tactical_total, 2) if tactical_total is not None else None,
+            strategic_total,
+            tactical_total,
             self._decision(strategic_total),
             self._decision(tactical_total),
             confidence,
