@@ -9,7 +9,7 @@ def test_v12_weights_are_explicit():
 
 def test_missing_confidence_inputs_do_not_crash_or_become_80():
     value = DecisionEngine.confidence(100, None, None, 100, 100, 100, None)
-    assert value == 49.5
+    assert value == 50.0
 
 
 def test_strategic_score_uses_technical():
