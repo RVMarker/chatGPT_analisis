@@ -38,11 +38,9 @@ class DecisionModule:
             available = bool(result.get("available", False))
             requirements = result.get("requirements", {}) or {}
         else:
-            return 0.0
-        if not available:
-            return 0.0
-        if not requirements:
-            return 50.0
+            return None
+        if not available or not requirements:
+            return None
         satisfied = sum(bool(v) for v in requirements.values())
         return round(100.0 * satisfied / len(requirements), 2)
 
@@ -65,6 +63,33 @@ class DecisionModule:
             flags.extend(str(x) for x in technical.get("warnings", []) or [])
         return flags
 
+    @staticmethod
+    def _data_quality_inputs(context):
+        provider_data = context.metadata.get("data_providers", {}) or {}
+        available_groups = [k for k in ("price", "financials", "history") if provider_data.get(k)]
+        completeness = round(100.0 * len(available_groups) / 3, 2)
+        freshness = None
+        raw_freshness = provider_data.get("freshness")
+        if raw_freshness is not None:
+            try:
+                freshness = max(0.0, min(100.0, float(raw_freshness)))
+            except (TypeError, ValueError):
+                freshness = None
+        consistency = None
+        raw_consistency = provider_data.get("consistency")
+        if raw_consistency is not None:
+            try:
+                consistency = max(0.0, min(100.0, float(raw_consistency)))
+            except (TypeError, ValueError):
+                consistency = None
+        return {
+            "provider_quality": score_provider_quality(provider_data),
+            "freshness": freshness,
+            "consistency": consistency,
+            "completeness": completeness,
+            "technical_data_quality": DecisionModule._technical_quality(context),
+        }
+
     def run(self, context):
         fundamental = self._score(context.fundamentals)
         valuation = self._score(context.valuation)
@@ -72,13 +97,6 @@ class DecisionModule:
         technical = self._score(context.technical)
         sentiment = self._score(context.sentiment)
         smart_money = self._score(context.metadata.get("smart_money"))
-
-        provider_data = context.metadata.get("data_providers", {}) or {}
-        provider_quality = score_provider_quality(provider_data)
-        completeness = round(sum(bool(provider_data.get(k)) for k in ("price", "financials", "history")) / 3 * 100, 2)
-        freshness = 100.0 if provider_data.get("history") else 0.0
-        consistency = 80.0
-        technical_quality = self._technical_quality(context)
 
         result = self.engine.evaluate(
             strategic_scores={
@@ -92,13 +110,7 @@ class DecisionModule:
                 "sentiment": sentiment,
                 "smart_money": smart_money,
             },
-            confidence_inputs={
-                "provider_quality": provider_quality,
-                "freshness": freshness,
-                "consistency": consistency,
-                "completeness": completeness,
-                "technical_data_quality": technical_quality,
-            },
+            confidence_inputs=self._data_quality_inputs(context),
             strengths=self._collect_strengths(context),
             red_flags=self._collect_red_flags(context),
             contextual={
