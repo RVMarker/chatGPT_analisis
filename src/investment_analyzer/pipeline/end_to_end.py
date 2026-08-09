@@ -1,4 +1,4 @@
-"""V12.47 end-to-end multi-asset investment pipeline with ETF and REIT/FIBRA analysis."""
+"""V12.75 end-to-end multi-asset investment pipeline."""
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
@@ -11,6 +11,10 @@ from investment_analyzer.analysis.etf_analyzer import ETFAnalyzer
 from investment_analyzer.analysis.etf_scoring import ETFDecisionScorer
 from investment_analyzer.analysis.decision_integration import SpecializedDecisionIntegrator
 from investment_analyzer.analysis.reit_fibra_integration import REITFibraAnalyzer
+from investment_analyzer.analysis.crypto_analyzer import CryptoAnalyzer
+from investment_analyzer.analysis.crypto_valuation import CryptoValuation
+from investment_analyzer.analysis.bond_analyzer import BondAnalyzer
+from investment_analyzer.analysis.bond_valuation import BondValuation
 
 @dataclass(slots=True)
 class PipelineResult:
@@ -18,8 +22,8 @@ class PipelineResult:
     def as_dict(self): return asdict(self)
 
 class InvestmentPipeline:
-    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None):
-        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer()
+    def __init__(self,classifier=None,identity_registry=None,consensus=None,data_router=None,acquisition=None,etf_analyzer=None,etf_scorer=None,decision_integrator=None,reit_fibra_analyzer=None,crypto_analyzer=None,crypto_valuation=None,bond_analyzer=None,bond_valuation=None):
+        self.classifier=classifier or AssetClassifier(); self.identity=identity_registry or InstrumentIdentityRegistry(); self.consensus=consensus or ProviderConsensus(); self.router=data_router or DataAcquisitionRouter(); self.acquisition=acquisition or MultiProviderAcquisitionEngine(self.router); self.etf_analyzer=etf_analyzer or ETFAnalyzer(); self.etf_scorer=etf_scorer or ETFDecisionScorer(); self.decision_integrator=decision_integrator or SpecializedDecisionIntegrator(); self.reit_fibra_analyzer=reit_fibra_analyzer or REITFibraAnalyzer(); self.crypto_analyzer=crypto_analyzer or CryptoAnalyzer(); self.crypto_valuation=crypto_valuation or CryptoValuation(); self.bond_analyzer=bond_analyzer or BondAnalyzer(); self.bond_valuation=bond_valuation or BondValuation()
     @staticmethod
     def _decision(score,coverage,confidence):
         if coverage<60 or confidence<50:return "MANTENER"
@@ -28,12 +32,18 @@ class InvestmentPipeline:
         if score>=45:return "MANTENER"
         if score>=30:return "REDUCIR"
         return "VENDER"
+    @staticmethod
+    def _enriched(acquisition): return acquisition.enriched or {}
     def run(self,*,symbol,asset_type=None,isin=None,country=None,exchange=None,currency=None,provider_symbols=None,aliases=(),provider_metadata=None,consensus_data=None,analysis=None,strategic_score=None,strategic_coverage=0,tactical_score=None,tactical_coverage=0,data_quality=100.0,fetchers=None):
-        md=provider_metadata or {}; classification=self.classifier.classify(symbol,provider_asset_type=asset_type,quote_type=md.get("quote_type"),description=md.get("description"),metadata=md); final_asset=classification.asset_type if asset_type is None else self.identity.normalize_asset_type(asset_type); route=self.router.plan(final_asset,symbol); ident=self.identity.register(asset_type=final_asset,symbol=symbol,isin=isin,country=country,exchange=exchange,currency=currency,provider_symbols=provider_symbols,aliases=aliases,metadata=md); acquisition=self.acquisition.acquire(symbol=symbol,asset_type=final_asset,fetchers=fetchers or {}); specialized={}; specialized_warnings=[]
+        md=provider_metadata or {}; classification=self.classifier.classify(symbol,provider_asset_type=asset_type,quote_type=md.get("quote_type"),description=md.get("description"),metadata=md); final_asset=classification.asset_type if asset_type is None else self.identity.normalize_asset_type(asset_type); route=self.router.plan(final_asset,symbol); ident=self.identity.register(asset_type=final_asset,symbol=symbol,isin=isin,country=country,exchange=exchange,currency=currency,provider_symbols=provider_symbols,aliases=aliases,metadata=md); acquisition=self.acquisition.acquire(symbol=symbol,asset_type=final_asset,fetchers=fetchers or {}); specialized={}; specialized_warnings=[]; enriched=self._enriched(acquisition)
         if final_asset=="ETF":
-            enriched=acquisition.enriched or {}; canonical={k:enriched.get(k) for k in ("price","expense_ratio","benchmark","aum","holdings","tracking_difference","tracking_error")}; canonical["price"]=canonical.get("price") or (acquisition.fields.get("price") or [{}])[0].get("value"); etf=self.etf_analyzer.analyze(symbol,canonical); etf_dict=etf.as_dict(); score=self.etf_scorer.score(etf_dict,data_quality); etf_dict.update({"score":score.score,"score_components":score.components,"score_coverage":score.coverage,"score_warnings":score.warnings}); specialized={"etf":etf_dict}; specialized_warnings=(etf.warnings or [])+(score.warnings or [])
+            canonical={k:enriched.get(k) for k in ("price","expense_ratio","benchmark","aum","holdings","tracking_difference","tracking_error","trackingDifference","trackingError","category_median_expense_ratio","yield","distribution_yield")}; canonical["price"]=canonical.get("price") or (acquisition.fields.get("price") or [{}])[0].get("value"); etf=self.etf_analyzer.analyze(symbol,canonical); etf_dict=etf.as_dict(); score=self.etf_scorer.score(etf_dict,data_quality); etf_dict.update({"score":score.score,"score_components":score.components,"score_coverage":score.coverage,"score_warnings":score.warnings}); specialized={"etf":etf_dict}; specialized_warnings=(etf.warnings or [])+(score.warnings or [])
         elif final_asset in {"REIT","FIBRA"}:
-            enriched=acquisition.enriched or {}; specialized={"reit_fibra":self.reit_fibra_analyzer.analyze(symbol,enriched)}; specialized_warnings=(enriched.get("warnings") or [])+(specialized["reit_fibra"].get("warnings") or [])
+            specialized={"reit_fibra":self.reit_fibra_analyzer.analyze(symbol,enriched)}; specialized_warnings=(enriched.get("warnings") or [])+(specialized["reit_fibra"].get("warnings") or [])
+        elif final_asset=="CRYPTO":
+            crypto=self.crypto_analyzer.analyze(symbol,enriched); specialized={"crypto":crypto}; valuation_input=dict(crypto); valuation_input.update({"momentum_score":enriched.get("momentum_score"),"drawdown_score":enriched.get("drawdown_score"),"relative_valuation_score":enriched.get("relative_valuation_score")}); specialized["crypto_decision"]=self.crypto_valuation.analyze(valuation_input); specialized_warnings=crypto.get("warnings",[])
+        elif final_asset=="BOND":
+            bond=self.bond_analyzer.analyze(symbol,enriched); specialized={"bond":bond}; valuation_input=dict(bond); valuation_input.update({"credit_score":enriched.get("credit_score"),"liquidity_score":enriched.get("liquidity_score")}); specialized["bond_decision"]=self.bond_valuation.analyze(valuation_input); specialized_warnings=bond.get("warnings",[])
         consensus_input=consensus_data or {}
         if not consensus_input: consensus_input={field:[(x["provider"],x["value"]) for x in values] for field,values in acquisition.fields.items()}
         consensus=self.consensus.evaluate_batch(consensus_input,critical_fields=route["required_fields"]); blocked=[f for f,r in consensus.items() if not r.vote_allowed]; missing=acquisition.missing_required; cq=sum(r.quality_score for r in consensus.values())/len(consensus) if consensus else 0.0; completeness=100.0*(1-len(missing)/len(route["required_fields"])) if route["required_fields"] else 100.0; quality=min(float(data_quality),cq,completeness) if consensus else min(float(data_quality),completeness); warnings=[]
@@ -44,4 +54,8 @@ class InvestmentPipeline:
         if final_asset=="ETF" and "etf" in specialized: decision["strategic"]=self.decision_integrator.integrate(asset_type="ETF",strategic=decision["strategic"],specialized=specialized)
         elif final_asset in {"REIT","FIBRA"} and "reit_fibra" in specialized:
             rf=specialized["reit_fibra"]; decision["strategic"].update({"generic_score":decision["strategic"].get("score"),"score":rf["score"],"coverage":rf["coverage"],"specialized_component":"REIT_FIBRA","specialized_score":rf["score"],"specialized_coverage":rf["coverage"],"decision_basis":"REIT/FIBRA FFO-AFFO-NAV valuation"}); decision["strategic"]["verdict"]=self._decision(float(rf["score"]),float(rf["coverage"]),float(quality)*float(rf["coverage"])/100); decision["strategic"]["confidence"]=round(float(quality)*float(rf["coverage"])/100,2)
+        elif final_asset=="CRYPTO" and "crypto_decision" in specialized:
+            cd=specialized["crypto_decision"]; decision["strategic"].update({"score":cd.get("strategic_score"),"coverage":cd.get("coverage",0),"verdict":cd.get("strategic_verdict") or "MANTENER","specialized_component":"CRYPTO","decision_basis":"Crypto liquidity/risk/relative valuation"}); decision["tactical"].update({"score":cd.get("tactical_score"),"coverage":cd.get("coverage",0),"verdict":cd.get("tactical_verdict") or "MANTENER","specialized_component":"CRYPTO","decision_basis":"Crypto momentum/liquidity"})
+        elif final_asset=="BOND" and "bond_decision" in specialized:
+            bd=specialized["bond_decision"]; decision["strategic"].update({"score":bd.get("relative_value_score"),"coverage":bd.get("coverage",0),"verdict":bd.get("strategic_verdict") or "MANTENER","specialized_component":"BOND","decision_basis":"Bond yield/price/duration/credit/liquidity"})
         return PipelineResult(ident.as_dict(),classification.as_dict(),route,acquisition.as_dict(),specialized,{k:r.as_dict() for k,r in consensus.items()},analysis or {},decision,{"data_quality":round(quality,2),"consensus_quality":round(cq,2),"completeness":round(completeness,2),"blocked_fields":blocked,"missing_required":missing},warnings)
