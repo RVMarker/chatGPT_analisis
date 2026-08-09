@@ -10,11 +10,12 @@ def _fmt(value, digits=2):
     return str(value)
 
 
-def render_trade_plan(plan: dict | None) -> str:
+def render_trade_plan(plan: dict | None, final_decision: dict | None = None) -> str:
     plan = plan or {}
+    final_decision = final_decision or {}
     lines = ["", "PLAN OPERATIVO", "-" * 72]
     for key, label in (
-        ("operation", "Operación"),
+        ("operation", "Operación plan"),
         ("entry", "Entry"),
         ("stop_loss", "Stop Loss"),
         ("target_1", "Target 1"),
@@ -33,11 +34,16 @@ def render_trade_plan(plan: dict | None) -> str:
         digits = 1 if key == "margin_of_safety_pct" else 2
         lines.append(f"  {label:22s}: {_fmt(value, digits)}")
 
-    reasons = plan.get("reasons") or []
+    final = final_decision.get("decision")
+    if final:
+        lines.append(f"  DECISIÓN FINAL        : {final}")
+        lines.append(f"  Estado Quality Gate   : {_fmt(final_decision.get('status'), 0)}")
+
+    reasons = plan.get("reasons") or final_decision.get("reasons") or []
     if reasons:
         lines.append("  Bloqueos:")
         lines.extend(f"    - {reason}" for reason in reasons)
     else:
-        lines.append("  Quality Gate         : APROBADO")
+        lines.append("  Quality Gate           : APROBADO")
     lines.append("-" * 72)
     return "\n".join(lines)
