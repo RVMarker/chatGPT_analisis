@@ -1,4 +1,4 @@
-"""V12.62 ETF-specific analysis with holdings, costs and exposure."""
+"""V12.64 ETF-specific analysis with holdings, costs and exposure."""
 from __future__ import annotations
 from dataclasses import dataclass,asdict
 from typing import Any
@@ -28,14 +28,11 @@ class ETFAnalyzer:
             for name,weight in holdings.items(): normalized.append({'name':name,'weight':self._weight(weight)})
         elif isinstance(holdings,list):
             for h in holdings:
-                if isinstance(h,dict): normalized.append({'name':h.get('name') or h.get('symbol') or h.get('holding'),'weight':self._weight(h.get('weight') if 'weight' in h else h.get('percent')),'sector':h.get('sector'),'country':h.get('country') or h.get('region')})
-        normalized=[x for x in normalized if x['name']]
-        normalized.sort(key=lambda x:x['weight'] if x['weight'] is not None else -1,reverse=True)
-        top10=normalized[:10]; top10_weight=sum(x['weight'] or 0 for x in top10) if top10 else None
-        concentration=None if top10_weight is None else max(0,min(100,100-top10_weight))
+                if isinstance(h,dict): normalized.append({'name':h.get('name') or h.get('symbol') or h.get('holding'),'weight':self._weight(h.get('weight') if 'weight' in h else h.get('percent')),'sector':h.get('sector') or h.get('industry'),'country':h.get('country') or h.get('region')})
+        normalized=[x for x in normalized if x['name']]; normalized.sort(key=lambda x:x['weight'] if x['weight'] is not None else -1,reverse=True)
+        top10=normalized[:10]; top10_weight=sum(x['weight'] or 0 for x in top10) if top10 else None; concentration=None if top10_weight is None else max(0,min(100,100-top10_weight))
         expense=p.get('expense_ratio') if p.get('expense_ratio') is not None else p.get('expenseRatio') if p.get('expenseRatio') is not None else p.get('annualReportExpenseRatio')
-        fields=[p.get('price'),expense,p.get('benchmark'),p.get('aum') or p.get('totalAssets'),top10]
-        coverage=100*sum(x is not None and x!=[] for x in fields)/len(fields)
+        fields=[p.get('price'),expense,p.get('benchmark'),p.get('aum') or p.get('totalAssets'),top10]; coverage=100*sum(x is not None and x!=[] for x in fields)/len(fields)
         warnings=[]
         if not top10:warnings.append('TOP 10 holdings no disponibles')
         if expense is None:warnings.append('Expense ratio no disponible')
