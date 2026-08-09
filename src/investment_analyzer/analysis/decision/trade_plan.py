@@ -29,10 +29,15 @@ def build_trade_plan(*, price, fair_value=None, bear_value=None, bull_value=None
     if stop_loss is None and atr and price - 2.0 * atr > 0:
         stop_loss = price - 2.0 * atr
 
-    target_1 = resistance if resistance and resistance > price else None
-    target_2 = fair if fair and fair > price else (bull if bull and bull > price else None)
+    # T1 must be a real resistance below T2. If there is no valid structure,
+    # do not manufacture a target merely to make the trade executable.
+    target_2 = fair if fair and fair > price else None
+    if target_2 is None and bull and bull > price:
+        target_2 = bull
     if bull and target_2:
         target_2 = min(target_2, bull)
+
+    target_1 = resistance if resistance and resistance > price else None
     if target_1 and target_2 and target_1 >= target_2:
         target_1 = None
 
