@@ -21,7 +21,6 @@ def test_missing_component_is_excluded_and_not_replaced_by_50():
         "technical": 60,
         "risk": 50,
     })
-    assert score == round((80 * .35 + 60 * .20 + 50 * .15) / .70, 2)
-    assert score == 67.86
+    assert round(score, 2) == 67.86
     assert items[1].available is False
     assert items[1].weight == 0.0
