@@ -15,6 +15,7 @@ from investment_analyzer.pipeline.macro_production import ProductionMacroModule
 from investment_analyzer.pipeline.technical_module import TechnicalModule
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
 from investment_analyzer.security.asset_loader import AssetLoader
+from investment_analyzer.security.security_master import SecurityMaster
 from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
 
 
@@ -31,7 +32,14 @@ class ModuleBundle:
 
 
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
-    registry, manager = build_provider_stack(yahoo_provider=yahoo_provider, fmp_provider=fmp_provider, symbol_mappings=symbol_mappings)
+    security_master = SecurityMaster()
+    security_master.seed_production_defaults()
+    registry, manager = build_provider_stack(
+        yahoo_provider=yahoo_provider,
+        fmp_provider=fmp_provider,
+        symbol_mappings=symbol_mappings,
+        security_master=security_master,
+    )
     data_loader = FinancialDataLoader(provider_manager=manager)
     modules = ModuleBundle(
         technical=TechnicalModule(),
@@ -43,7 +51,14 @@ def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=No
         dow=UnavailableModule("dow"),
         backtest=UnavailableModule("backtest"),
     )
-    pipeline = AnalysisPipeline(providers=manager, modules=modules, financial_adapter=FinancialModuleAdapter(), financial_loader=data_loader, asset_loader=AssetLoader(), decision_module=DecisionModule())
+    pipeline = AnalysisPipeline(
+        providers=manager,
+        modules=modules,
+        financial_adapter=FinancialModuleAdapter(),
+        financial_loader=data_loader,
+        asset_loader=AssetLoader(security_master=security_master),
+        decision_module=DecisionModule(),
+    )
     return pipeline, manager, registry
 
 
