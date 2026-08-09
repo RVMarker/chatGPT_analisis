@@ -3,9 +3,9 @@ requires = ["setuptools>=75.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "investment-analyzer-v11"
-version = "11.0.0"
-description = "Professional Investment Analysis Platform"
+name = "investment-analyzer-v12"
+version = "12.0.0"
+description = "Professional Investment Analysis Platform with transparent strategic, tactical and executable trade decisions"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text="MIT"}
