@@ -1,3 +1,5 @@
+import pytest
+
 from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
 from investment_analyzer.analysis.decision.decision_weights import STRATEGIC, TACTICAL
 
@@ -20,5 +22,5 @@ def test_strategic_score_uses_technical():
         "technical": 60,
         "risk": 50,
     })
-    assert score == 68.5
+    assert score == pytest.approx(68.5)
     assert [item.name for item in items] == ["fundamental", "valuation", "technical", "risk"]
