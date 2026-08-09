@@ -1,9 +1,50 @@
-from types import SimpleNamespace
-
 import pytest
 
 from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
 from investment_analyzer.analysis.integration.fundamental_valuation_risk import FinancialAnalysisIntegrator
+from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
+
+
+def _statements(*, fcf=100.0, historical_fcf=None, interest=5.0):
+    return FinancialStatements(
+        balance=BalanceSheet(
+            total_assets=1000.0,
+            current_assets=250.0,
+            cash=20.0,
+            total_liabilities=300.0,
+            current_liabilities=150.0,
+            long_term_debt=100.0,
+            shareholders_equity=700.0,
+            retained_earnings=500.0,
+            working_capital=100.0,
+        ),
+        income=IncomeStatement(
+            revenue=500.0,
+            operating_income=120.0,
+            ebit=120.0,
+            ebitda=150.0,
+            pretax_income=100.0,
+            net_income=79.0,
+            interest_expense=interest,
+        ),
+        cashflow=CashFlow(
+            free_cash_flow=fcf,
+            operating_cash_flow=130.0,
+            capex=-30.0,
+            historical_fcf=historical_fcf or [120.0, 110.0, 100.0],
+        ),
+        fiscal_date="2026-01-01",
+    )
+
+
+def _price(*, beta=1.1):
+    return PriceData(
+        symbol="TEST",
+        current=100.0,
+        market_cap=900.0,
+        shares_outstanding=9.0,
+        beta=beta,
+    )
 
 
 def test_growth_rates_are_derived_from_real_positive_fcf_history():
@@ -23,27 +64,19 @@ def test_growth_forecast_does_not_create_extreme_negative_growth_from_old_histor
 
 
 def test_terminal_growth_is_long_run_default_not_last_fcf_growth():
-    integrator = FinancialAnalysisIntegrator()
-    statements = SimpleNamespace(
-        balance=SimpleNamespace(long_term_debt=100.0, cash=20.0),
-        income=SimpleNamespace(interest_expense=5.0, pretax_income=100.0, net_income=79.0),
-        cashflow=SimpleNamespace(free_cash_flow=100.0, historical_fcf=[120.0, 110.0, 100.0]),
+    result = FinancialAnalysisIntegrator().run(
+        _statements(historical_fcf=[120.0, 110.0, 100.0]),
+        _price(),
     )
-    price = SimpleNamespace(current=100.0, market_cap=900.0, shares_outstanding=9.0, shares_outstanding_source=None, shares_outstanding_scale=None, beta=1.1)
-    result = integrator.run(statements, price)
     assert result.valuation["terminal_growth"] == pytest.approx(0.025)
     assert result.valuation["wacc_details"]["terminal_growth_method"] == "long_run_nominal_growth_default"
 
 
 def test_fcff_conversion_adds_back_after_tax_interest_before_wacc_dcf():
-    integrator = FinancialAnalysisIntegrator()
-    statements = SimpleNamespace(
-        balance=SimpleNamespace(long_term_debt=100.0, cash=20.0),
-        income=SimpleNamespace(interest_expense=10.0, pretax_income=100.0, net_income=79.0),
-        cashflow=SimpleNamespace(free_cash_flow=100.0, historical_fcf=[90.0, 100.0]),
+    result = FinancialAnalysisIntegrator().run(
+        _statements(fcf=100.0, historical_fcf=[90.0, 100.0], interest=10.0),
+        _price(beta=1.0),
     )
-    price = SimpleNamespace(current=100.0, market_cap=900.0, shares_outstanding=9.0, shares_outstanding_source=None, shares_outstanding_scale=None, beta=1.0)
-    result = integrator.run(statements, price)
     assert result.valuation["model"] == "FCFF_DCF"
     assert result.valuation["fcf_base_reported"] == pytest.approx(100.0)
     assert result.valuation["fcff_base"] == pytest.approx(108.0)
@@ -71,9 +104,7 @@ def test_trade_plan_uses_real_resistance_and_sizes_by_risk():
 
 
 def test_wacc_is_explicitly_derived_from_market_inputs():
-    statements = SimpleNamespace(balance=SimpleNamespace(long_term_debt=100.0), income=SimpleNamespace(interest_expense=5.0, pretax_income=100.0, net_income=79.0))
-    price = SimpleNamespace(current=100.0, market_cap=900.0, beta=1.1)
-    wacc, details = FinancialAnalysisIntegrator._derive_wacc(statements, price)
+    wacc, details = FinancialAnalysisIntegrator._derive_wacc(_statements(), _price(),)
     assert 0.06 <= wacc <= 0.18
     assert details["method"] == "CAPM_WACC"
     assert details["beta"] == pytest.approx(1.1)
