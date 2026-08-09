@@ -1,24 +1,22 @@
-"""Pesos oficiales del Decision Engine V11.
+"""Pesos oficiales del Decision Engine V12.
 
-Importante: comparables y macro NO forman parte del score del veredicto.
-Se conservan como contexto explicativo para el analista (valor relativo,
-condiciones de tasas y margen de seguridad exigido).
+Los pesos son transparentes y forman parte del contrato de decisión.
+Comparables y macro son exclusivamente contextuales y nunca votan.
 """
 
 # Horizonte estratégico: años.
-# Solo factores que representan tesis fundamental/valoración/riesgo.
 STRATEGIC = {
-    "fundamental": 0.40,
-    "valuation": 0.40,
-    "risk": 0.20,
+    "fundamental": 0.35,
+    "valuation": 0.30,
+    "technical": 0.20,
+    "risk": 0.15,
 }
 
 # Horizonte táctico: semanas.
-# Macro queda fuera del score; sirve como contexto, no como voto.
 TACTICAL = {
-    "technical": 0.60,
-    "sentiment": 0.20,
-    "smart_money": 0.20,
+    "technical": 0.45,
+    "sentiment": 0.30,
+    "smart_money": 0.25,
 }
 
 CONTEXTUAL = {
