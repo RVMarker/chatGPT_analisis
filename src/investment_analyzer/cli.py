@@ -46,7 +46,7 @@ def run_cli(
         )
     print(format_decision_report(context))
     if hasattr(context, "trade_plan"):
-        print(render_trade_plan(context.trade_plan))
+        print(render_trade_plan(context.trade_plan, getattr(context, "metadata", {}).get("final_decision")))
     return 0
 
 
