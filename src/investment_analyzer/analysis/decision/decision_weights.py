@@ -1,34 +1,35 @@
-"""Pesos oficiales del Decision Engine V11.
+"""Pesos oficiales del Decision Engine V12.81.
 
-Importante: comparables y macro NO forman parte del score del veredicto.
-Se conservan como contexto explicativo para el analista (valor relativo,
-condiciones de tasas y margen de seguridad exigido).
+REGLA: comparables y macro NO votan en el veredicto. Son contexto.
+El veredicto estratégico usa exactamente 35/30/20/15.
 """
 
 # Horizonte estratégico: años.
-# Solo factores que representan tesis fundamental/valoración/riesgo.
+# Technical se conserva aquí como componente de riesgo/entrada, mientras
+# comparables y macro permanecen fuera del voto.
 STRATEGIC = {
-    "fundamental": 0.40,
-    "valuation": 0.40,
-    "risk": 0.20,
+    "fundamental": 0.35,
+    "valuation": 0.30,
+    "technical": 0.20,
+    "risk": 0.15,
 }
 
-# Horizonte táctico: semanas.
-# Macro queda fuera del score; sirve como contexto, no como voto.
+# Horizonte táctico: semanas. Ningún factor macro/comparable vota.
 TACTICAL = {
-    "technical": 0.60,
-    "sentiment": 0.20,
-    "smart_money": 0.20,
+    "technical": 0.45,
+    "sentiment": 0.30,
+    "smart_money": 0.25,
 }
 
 CONTEXTUAL = {
     "comparables": 0.0,
+    "peer_valuation": 0.0,
     "macro": 0.0,
+    "interest_rate_context": 0.0,
 }
 
 
 def validate_weights() -> None:
-    """Fail fast if a decision category is accidentally misweighted."""
     for name, weights in (("STRATEGIC", STRATEGIC), ("TACTICAL", TACTICAL)):
         total = sum(weights.values())
         if abs(total - 1.0) > 1e-9:
