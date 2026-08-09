@@ -1,8 +1,9 @@
-"""V12.30 interactive VS Code entry point integrated with the pipeline."""
+"""V12.39 interactive VS Code entry point with live provider registry."""
 from __future__ import annotations
 import argparse,json,sys
 from investment_analyzer.pipeline.end_to_end import InvestmentPipeline
 from investment_analyzer.cli.menu import run_interactive
+from investment_analyzer.providers.provider_registry import ProviderRegistry
 
 ASSET_TYPES=["STOCK","ETF","REIT","FIBRA","CRYPTO","BOND"]
 
@@ -10,7 +11,7 @@ def build_parser():
     p=argparse.ArgumentParser(description="V12 Investment Decision Engine")
     p.add_argument("symbol",nargs="?",help="Ticker; si se omite, se solicita interactivamente")
     p.add_argument("--asset-type",choices=ASSET_TYPES); p.add_argument("--isin"); p.add_argument("--country"); p.add_argument("--exchange"); p.add_argument("--currency")
-    p.add_argument("--provider-symbol",action="append",default=[],metavar="PROVIDER=SYMBOL"); p.add_argument("--json",action="store_true"); p.add_argument("--once",action="store_true",help="Ejecutar una sola vez")
+    p.add_argument("--provider-symbol",action="append",default=[],metavar="PROVIDER=SYMBOL"); p.add_argument("--json",action="store_true"); p.add_argument("--once",action="store_true")
     return p
 
 def parse_provider_symbols(items):
@@ -27,13 +28,17 @@ def render(payload):
     for horizon in ("strategic","tactical"):
         x=d[horizon]; label="Estratégico" if horizon=="strategic" else "Táctico"
         print(f"{label:<12}: {x['verdict']} | score={x['score']} | cobertura={x['coverage']:.1f}% | confianza={x['confidence']:.1f}%")
-    print(f"Calidad datos: {q['data_quality']:.1f}% | Consenso: {q['consensus_quality']:.1f}%")
+    print(f"Calidad datos: {q['data_quality']:.1f}% | Consenso: {q['consensus_quality']:.1f}% | Completitud: {q.get('completeness',0):.1f}%")
     if q["blocked_fields"]: print("Campos bloqueados: "+", ".join(q["blocked_fields"]))
+    if q.get("missing_required"): print("Campos requeridos ausentes: "+", ".join(q["missing_required"]))
+    acq=payload.get("acquisition",{}); used=acq.get("provider_used",{})
+    if used: print("Proveedores utilizados: "+", ".join(f"{k}={v}" for k,v in sorted(used.items())))
     for warning in payload["warnings"]: print("ADVERTENCIA: "+warning)
 
 def execute(symbol,args,mode):
+    registry=ProviderRegistry().register_defaults()
     pipeline=InvestmentPipeline()
-    result=pipeline.run(symbol=symbol,asset_type=args.asset_type,isin=args.isin,country=args.country,exchange=args.exchange,currency=args.currency,provider_symbols=parse_provider_symbols(args.provider_symbol))
+    result=pipeline.run(symbol=symbol,asset_type=args.asset_type,isin=args.isin,country=args.country,exchange=args.exchange,currency=args.currency,provider_symbols=parse_provider_symbols(args.provider_symbol),fetchers=registry.fetchers())
     payload=result.as_dict()
     if mode=="STRATEGIC": payload["decision"]["tactical"]={"verdict":"NO EJECUTADO","score":None,"coverage":0,"confidence":0}
     elif mode=="TACTICAL": payload["decision"]["strategic"]={"verdict":"NO EJECUTADO","score":None,"coverage":0,"confidence":0}
@@ -53,8 +58,8 @@ def main(argv=None):
             payload=execute(selection["symbol"],args,mode)
             if args.json: print(json.dumps(payload,ensure_ascii=False,indent=2,default=str))
             else: render(payload)
-            again=input("\n¿Analizar otro activo? [S/n]: ").strip().lower()
-            if again in {"n","no"}: return 0
+            if args.once:return 0
+            if input("\n¿Analizar otro activo? [S/n]: ").strip().lower() in {"n","no"}: return 0
     except (KeyboardInterrupt,EOFError): print("\nAnálisis cancelado."); return 0
     except Exception as exc: print(f"ERROR: {exc}",file=sys.stderr); return 2
 
