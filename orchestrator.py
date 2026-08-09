@@ -1,14 +1,9 @@
-"""V12 CLI entrypoint over the existing AnalysisPipeline.
-
-Prompts for the asset instead of requiring a ticker argument. The existing
-provider/financial/technical pipeline remains the source of analysis data;
-this orchestrator adds the final transparent decision and executable trade
-plan without inventing missing values.
-"""
+"""V12 CLI entrypoint over the existing AnalysisPipeline."""
 from __future__ import annotations
 
 from investment_analyzer.app import build_application
 from investment_analyzer.analysis.decision.trade_plan import build_trade_plan
+from investment_analyzer.analysis.decision.scenario_adapter import normalize_scenarios
 
 STRATEGIC_WEIGHTS = {"fundamental": .35, "valuation": .30, "technical": .20, "risk": .15}
 TACTICAL_WEIGHTS = {"technical": .45, "sentiment": .30, "smart_money": .25}
@@ -45,25 +40,45 @@ def _find(mapping, names):
     wanted = {str(x).lower() for x in names}
     for k, v in mapping.items():
         if str(k).lower() in wanted:
-            return v
+            try:
+                value = float(v)
+                if value > 0:
+                    return value
+            except (TypeError, ValueError):
+                pass
     for v in mapping.values():
         if isinstance(v, dict):
-            found = _find(v, wanted)
+            found = _find(v, names)
             if found is not None:
                 return found
     return None
 
 
 def _current_price(context):
-    p = getattr(context, "price", None)
-    for attr in ("current", "close", "price", "value"):
-        value = getattr(p, attr, None)
-        if value is not None:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                pass
+    for source in (getattr(context, "price", None), getattr(context, "technical", None)):
+        if isinstance(source, dict):
+            value = _find(source, ("current", "close", "price", "last", "last_price"))
+            if value is not None:
+                return value
+        else:
+            for attr in ("current", "close", "price", "value"):
+                value = getattr(source, attr, None)
+                if value is not None:
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        pass
     return None
+
+
+def _verdict(score):
+    if score is None:
+        return "N/D"
+    if score >= 80: return "COMPRAR"
+    if score >= 70: return "ACUMULAR"
+    if score >= 50: return "MANTENER"
+    if score >= 35: return "REDUCIR"
+    return "VENDER"
 
 
 def run():
@@ -85,17 +100,8 @@ def run():
          "smart_money": context.metadata.get("smart_money")}, TACTICAL_WEIGHTS)
 
     price = _current_price(context)
-    valuation = context.valuation or {}
-    fair = _find(valuation, ("fair_value", "intrinsic_value", "fair_value_per_share"))
-    bear = _find(valuation, ("bear_value", "bear_case"))
-    bull = _find(valuation, ("bull_value", "bull_case"))
-    if fair is None:
-        candidates = [_find(valuation, (x,)) for x in ("dcf_fair_value", "graham_value", "peg_value", "relative_value")]
-        candidates = [float(x) for x in candidates if isinstance(x, (int, float)) and x > 0]
-        fair = sum(candidates) / len(candidates) if candidates else None
-    if fair is not None:
-        bear = bear or float(fair) * .80
-        bull = bull or float(fair) * 1.20
+    scenarios = normalize_scenarios(context.valuation or {})
+    fair, bear, bull = scenarios["base"], scenarios["bear"], scenarios["bull"]
 
     technical = context.technical or {}
     support = _find(technical, ("support", "support_level", "nearest_support"))
@@ -106,9 +112,14 @@ def run():
                              capital=capital, risk_pct=risk_pct,
                              max_position_pct=max_position_pct)
 
-    strategic_verdict = "N/D" if strategic is None else ("COMPRAR" if strategic >= 80 else "ACUMULAR" if strategic >= 70 else "MANTENER" if strategic >= 50 else "REDUCIR" if strategic >= 35 else "VENDER")
-    tactical_verdict = "N/D" if tactical is None else ("COMPRAR" if tactical >= 80 else "ACUMULAR" if tactical >= 70 else "MANTENER" if tactical >= 50 else "REDUCIR" if tactical >= 35 else "VENDER")
-    operation = trade["operation"] if strategic_verdict not in {"VENDER", "REDUCIR"} else "VENDER"
+    strategic_verdict = _verdict(strategic)
+    tactical_verdict = _verdict(tactical)
+    if strategic_verdict in {"VENDER", "REDUCIR"}:
+        operation = "VENDER"
+    elif trade["operation"] == "COMPRAR" and strategic_verdict in {"COMPRAR", "ACUMULAR", "MANTENER"}:
+        operation = "COMPRAR"
+    else:
+        operation = "ESPERAR"
 
     print("\n" + "=" * 72)
     print("DECISIÓN DE INVERSIÓN V12")
