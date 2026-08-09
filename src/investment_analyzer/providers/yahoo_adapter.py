@@ -60,6 +60,37 @@ class YahooFinanceAdapter:
                 continue
         return None
 
+    @classmethod
+    def _historical_fcf(cls, cashflow: Any) -> list[float]:
+        if cashflow is None or getattr(cashflow, "empty", True):
+            return []
+        try:
+            ocf_row = None
+            capex_row = None
+            for key in ("Operating Cash Flow", "Total Cash From Operating Activities"):
+                if key in cashflow.index:
+                    ocf_row = cashflow.loc[key]
+                    break
+            for key in ("Capital Expenditure", "Capital Expenditure Reported"):
+                if key in cashflow.index:
+                    capex_row = cashflow.loc[key]
+                    break
+            if ocf_row is None or capex_row is None:
+                return []
+            values = []
+            for date in cashflow.columns:
+                try:
+                    ocf = float(ocf_row.get(date))
+                    capex = float(capex_row.get(date))
+                    fcf = ocf + capex
+                    if fcf == fcf:
+                        values.append(fcf)
+                except (TypeError, ValueError):
+                    continue
+            return list(reversed(values))
+        except (AttributeError, TypeError):
+            return []
+
     @staticmethod
     def _reconcile_share_count(shares: float | None, market_cap: float | None, current_price: float | None):
         raw = None if shares is None else float(shares)
@@ -113,13 +144,19 @@ class YahooFinanceAdapter:
             previous = float(closes.iloc[-2]) if len(closes) > 1 else None
         market_cap = self._value(info, "market_cap", "marketCap")
         raw_shares = self._value(info, "shares")
+        beta = None
+        try:
+            beta = self._value(getattr(ticker, "info", {}) or {}, "beta")
+            beta = float(beta) if beta is not None and float(beta) > 0 else None
+        except (TypeError, ValueError):
+            beta = None
         shares, shares_raw, shares_source, shares_scale = self._reconcile_share_count(raw_shares, market_cap, current)
         return PriceData(symbol=symbol.upper(), current=float(current),
                          previous_close=None if previous is None else float(previous),
                          open=self._value(info, "open"), high=self._value(info, "day_high", "dayHigh"),
                          low=self._value(info, "day_low", "dayLow"),
                          volume=self._value(info, "three_month_average_volume", "threeMonthAverageVolume"),
-                         market_cap=market_cap, shares_outstanding=shares, beta=None,
+                         market_cap=market_cap, shares_outstanding=shares, beta=beta,
                          currency=self._value(info, "currency", default="USD") or "USD",
                          timestamp=datetime.now(timezone.utc),
                          shares_outstanding_raw=shares_raw, shares_outstanding_source=shares_source,
@@ -156,13 +193,15 @@ class YahooFinanceAdapter:
             ffo_proxy = inc.net_income + depreciation
             if property_gain is not None:
                 ffo_proxy -= property_gain
+        historical_fcf = self._historical_fcf(cashflow)
         cf = CashFlow(operating_cash_flow=self._latest_statement_value(cashflow, "Operating Cash Flow", "Total Cash From Operating Activities"),
                       capex=self._latest_statement_value(cashflow, "Capital Expenditure", "Capital Expenditure Reported"),
                       free_cash_flow=self._latest_statement_value(cashflow, "Free Cash Flow"),
                       dividends_paid=self._latest_statement_value(cashflow, "Cash Dividends Paid"),
                       dividends_paid_period="annual" if cashflow is not None and not getattr(cashflow, "empty", True) else None,
                       share_buybacks=self._latest_statement_value(cashflow, "Repurchase Of Capital Stock"),
-                      depreciation_amortization=depreciation, property_gain_loss=property_gain, ffo_proxy=ffo_proxy)
+                      depreciation_amortization=depreciation, property_gain_loss=property_gain, ffo_proxy=ffo_proxy,
+                      historical_fcf=historical_fcf)
         if cf.free_cash_flow is None and cf.operating_cash_flow is not None and cf.capex is not None:
             cf.free_cash_flow = cf.operating_cash_flow + cf.capex
         dates = getattr(balance, "columns", [])
