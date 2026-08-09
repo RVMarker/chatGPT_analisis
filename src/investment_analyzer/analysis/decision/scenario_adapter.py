@@ -1,8 +1,10 @@
 """Normalize valuation scenarios from heterogeneous provider outputs.
 
 Never invent Bear/Base/Bull values. Missing scenarios remain None.
+Technical targets are deliberately excluded from Base/Fair Value extraction.
 """
 from __future__ import annotations
+
 from typing import Any
 
 
@@ -32,6 +34,13 @@ def _find(data: Any, names: tuple[str, ...]):
 def normalize_scenarios(valuation: Any) -> dict[str, float | None]:
     return {
         "bear": _find(valuation, ("bear", "bear_value", "bear_case", "bear_price", "downside_case")),
-        "base": _find(valuation, ("fair_value", "intrinsic_value", "base", "base_value", "base_case", "target_price")),
+        "base": _find(valuation, (
+            "fair_value_per_share",
+            "fair_value",
+            "intrinsic_value",
+            "base",
+            "base_value",
+            "base_case",
+        )),
         "bull": _find(valuation, ("bull", "bull_value", "bull_case", "bull_price", "upside_case")),
     }
