@@ -1,10 +1,10 @@
 from investment_analyzer.providers.provider_bootstrap import build_provider_stack
-from investment_analyzer.security.security_master import SecurityMaster
+from investment_analyzer.security.security_master import Security, SecurityMaster
 
 
 def test_security_master_mapping_is_used_by_provider_manager(tmp_path):
     master = SecurityMaster(str(tmp_path / "security_master.db"))
-    master.add(__import__("investment_analyzer.security.security_master", fromlist=["Security"]).Security(
+    master.add(Security(
         asset_id="AST-FMTY14",
         canonical_symbol="FMTY14.MX",
         name="Fibra Mty",
