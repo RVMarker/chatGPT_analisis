@@ -8,13 +8,25 @@ from .symbol_resolver import SymbolResolver
 from .yahoo_provider import YahooProvider
 
 
-def build_provider_stack(yahoo_provider=None, fmp_provider=None, symbol_mappings=None):
-    """Build Registry + Manager and install explicit provider symbol mappings.
+def build_provider_stack(yahoo_provider=None, fmp_provider=None, symbol_mappings=None, security_master=None):
+    """Build Registry + Manager with canonical/provider-specific symbols.
 
-    ``symbol_mappings`` is a mapping of canonical symbol -> provider -> provider symbol.
-    The canonical symbol is never mutated.
+    Explicit ``symbol_mappings`` take precedence. When a SecurityMaster is
+    supplied, its persisted provider identifiers are loaded automatically so
+    the user-facing Yahoo ticker can differ from FMP/Polygon/etc. symbols.
     """
     resolver = SymbolResolver()
+
+    if security_master is not None:
+        for row in security_master.list_all():
+            canonical = row.get("canonical_symbol")
+            if not canonical:
+                continue
+            for provider_name in ("yahoo", "fmp", "alpha_vantage", "polygon", "finnhub"):
+                provider_symbol = row.get(provider_name)
+                if provider_symbol:
+                    resolver.register(canonical, provider_name, provider_symbol)
+
     for canonical, providers in (symbol_mappings or {}).items():
         for provider_name, provider_symbol in providers.items():
             resolver.register(canonical, provider_name, provider_symbol)
