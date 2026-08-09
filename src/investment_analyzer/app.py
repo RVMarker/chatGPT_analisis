@@ -1,7 +1,7 @@
 """Production composition root for the V12 analyzer."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass, asdict
 from collections.abc import Mapping
 
 from investment_analyzer.analysis.decision.final_decision import finalize_decision
@@ -36,36 +36,17 @@ class ModuleBundle:
 def build_application(symbol_mappings=None, yahoo_provider=None, fmp_provider=None):
     security_master = SecurityMaster()
     security_master.seed_production_defaults()
-    registry, manager = build_provider_stack(
-        yahoo_provider=yahoo_provider,
-        fmp_provider=fmp_provider,
-        symbol_mappings=symbol_mappings,
-        security_master=security_master,
-    )
+    registry, manager = build_provider_stack(yahoo_provider=yahoo_provider, fmp_provider=fmp_provider, symbol_mappings=symbol_mappings, security_master=security_master)
     data_loader = FinancialDataLoader(provider_manager=manager)
-    modules = ModuleBundle(
-        technical=TechnicalModule(),
-        comparables=ProductionComparablesModule(manager),
-        sentiment=YahooNewsModule(manager),
-        macro=ProductionMacroModule(),
-        porter=UnavailableModule("porter"),
-        elliott=UnavailableModule("elliott"),
-        dow=UnavailableModule("dow"),
-        backtest=UnavailableModule("backtest"),
-    )
-    pipeline = AnalysisPipeline(
-        providers=manager,
-        modules=modules,
-        financial_adapter=FinancialModuleAdapter(),
-        financial_loader=data_loader,
-        asset_loader=AssetLoader(security_master=security_master),
-        decision_module=DecisionModule(),
-    )
+    modules = ModuleBundle(technical=TechnicalModule(), comparables=ProductionComparablesModule(manager), sentiment=YahooNewsModule(manager), macro=ProductionMacroModule(), porter=UnavailableModule("porter"), elliott=UnavailableModule("elliott"), dow=UnavailableModule("dow"), backtest=UnavailableModule("backtest"))
+    pipeline = AnalysisPipeline(providers=manager, modules=modules, financial_adapter=FinancialModuleAdapter(), financial_loader=data_loader, asset_loader=AssetLoader(security_master=security_master), decision_module=DecisionModule())
     return pipeline, manager, registry
 
 
 def _find_number(value, names):
     wanted = {str(x).lower() for x in names}
+    if is_dataclass(value) and not isinstance(value, type):
+        value = asdict(value)
     if isinstance(value, Mapping):
         for key, item in value.items():
             if str(key).lower() in wanted:
@@ -100,9 +81,7 @@ def attach_trade_plan(context, capital=5000.0, risk_pct=0.02, max_position_pct=0
         support=_find_number(technical, ("support", "support_level", "nearest_support")),
         resistance=_find_number(technical, ("resistance", "resistance_level", "nearest_resistance")),
         atr=_find_number(technical, ("atr", "atr14", "average_true_range")),
-        capital=capital,
-        risk_pct=risk_pct,
-        max_position_pct=max_position_pct,
+        capital=capital, risk_pct=risk_pct, max_position_pct=max_position_pct,
     )
     metadata = getattr(context, "metadata", None)
     if isinstance(metadata, dict):
