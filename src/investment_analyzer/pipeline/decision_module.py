@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from investment_analyzer.analysis.decision.decision_engine import DecisionEngine
+from investment_analyzer.pipeline.provider_quality import score_provider_quality
 
 
 class DecisionModule:
@@ -48,12 +49,10 @@ class DecisionModule:
     @staticmethod
     def _collect_strengths(context):
         strengths = []
-        technical = getattr(context, "technical", {}) or {}
-        technical_score = DecisionModule._score(technical)
+        technical_score = DecisionModule._score(getattr(context, "technical", {}))
         if technical_score is not None and technical_score >= 70:
             strengths.append(f"Technical score favorable ({technical_score:.1f}/100)")
-        fundamentals = getattr(context, "fundamentals", {}) or {}
-        fundamental_score = DecisionModule._score(fundamentals)
+        fundamental_score = DecisionModule._score(getattr(context, "fundamentals", {}))
         if fundamental_score is not None and fundamental_score >= 70:
             strengths.append("Fundamental score favorable")
         return strengths
@@ -74,17 +73,12 @@ class DecisionModule:
         sentiment = self._score(context.sentiment)
         smart_money = self._score(context.metadata.get("smart_money"))
 
-        provider_data = context.metadata.get("data_providers", {})
-        provider_values = [provider_data.get("price"), provider_data.get("financials")]
-        required_present = sum(bool(value) for value in provider_values)
-        completeness = round(100.0 * required_present / len(provider_values), 2) if provider_values else 0.0
-        present_providers = [value for value in provider_values if value]
-        provider_quality = (
-            round(100.0 * sum(value == "yahoo" for value in present_providers) / len(present_providers), 2)
-            if present_providers else 0.0
-        )
-        technical_quality = self._technical_quality(context)
+        provider_data = context.metadata.get("data_providers", {}) or {}
+        provider_quality = score_provider_quality(provider_data)
+        completeness = round(sum(bool(provider_data.get(k)) for k in ("price", "financials", "history")) / 3 * 100, 2)
         freshness = 100.0 if provider_data.get("history") else 0.0
+        consistency = 80.0
+        technical_quality = self._technical_quality(context)
 
         result = self.engine.evaluate(
             strategic_scores={
@@ -101,7 +95,7 @@ class DecisionModule:
             confidence_inputs={
                 "provider_quality": provider_quality,
                 "freshness": freshness,
-                "consistency": 80.0,
+                "consistency": consistency,
                 "completeness": completeness,
                 "technical_data_quality": technical_quality,
             },
