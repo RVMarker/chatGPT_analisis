@@ -23,4 +23,8 @@ def test_pipeline_builds_trade_plan_and_position_sizing(monkeypatch):
     assert payload['decision']['trade_plan']['stop_loss']==92
     assert payload['decision']['trade_plan']['target_1']==115
     assert payload['decision']['trade_plan']['target_2']==130
+    assert payload['decision']['trade_plan']['risk_reward']==3.75
+    assert payload['position_sizing']['units']==12
+    assert payload['position_sizing']['position_value']==1200
+    assert payload['position_sizing']['actual_risk']==96
     assert payload['decision']['quality_gate']['operation'] in {'COMPRAR','ESPERAR','VENDER'}
