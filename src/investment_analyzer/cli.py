@@ -37,14 +37,16 @@ def run_cli(
         raise ValueError("max_position_pct debe estar entre 0 y 100")
 
     context = pipeline.run(ticker)
-    attach_trade_plan(
-        context,
-        capital=capital,
-        risk_pct=risk_pct / 100.0,
-        max_position_pct=max_position_pct / 100.0,
-    )
+    if hasattr(context, "price") and hasattr(context, "technical") and hasattr(context, "valuation"):
+        attach_trade_plan(
+            context,
+            capital=capital,
+            risk_pct=risk_pct / 100.0,
+            max_position_pct=max_position_pct / 100.0,
+        )
     print(format_decision_report(context))
-    print(render_trade_plan(context.trade_plan))
+    if hasattr(context, "trade_plan"):
+        print(render_trade_plan(context.trade_plan))
     return 0
 
 
