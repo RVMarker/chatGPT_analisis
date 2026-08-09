@@ -5,7 +5,7 @@ from investment_analyzer.analysis.integration.fundamental_valuation_risk import 
 from investment_analyzer.common.models import BalanceSheet, CashFlow, FinancialStatements, IncomeStatement, PriceData
 
 
-def _statements(*, fcf=100.0, historical_fcf=None, interest=5.0):
+def _statements(*, fcf=100.0, historical_fcf=None, interest=5.0, net_income=79.0):
     return FinancialStatements(
         balance=BalanceSheet(
             total_assets=1000.0,
@@ -24,7 +24,7 @@ def _statements(*, fcf=100.0, historical_fcf=None, interest=5.0):
             ebit=120.0,
             ebitda=150.0,
             pretax_income=100.0,
-            net_income=79.0,
+            net_income=net_income,
             interest_expense=interest,
         ),
         cashflow=CashFlow(
@@ -74,7 +74,7 @@ def test_terminal_growth_is_long_run_default_not_last_fcf_growth():
 
 def test_fcff_conversion_adds_back_after_tax_interest_before_wacc_dcf():
     result = FinancialAnalysisIntegrator().run(
-        _statements(fcf=100.0, historical_fcf=[90.0, 100.0], interest=10.0),
+        _statements(fcf=100.0, historical_fcf=[90.0, 100.0], interest=10.0, net_income=80.0),
         _price(beta=1.0),
     )
     assert result.valuation["model"] == "FCFF_DCF"
