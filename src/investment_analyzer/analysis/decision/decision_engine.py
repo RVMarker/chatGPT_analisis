@@ -116,10 +116,15 @@ class DecisionEngine:
             ))
         available_items = [item for item in items if item.available]
         if not available_items:
+            for item in items:
+                item.weight = 0.0
             return None, items, ["Ningún componente disponible; veredicto N/D"]
         total_weight = sum(item.weight for item in available_items)
-        for item in available_items:
-            item.weight = self._normalize_weight(item.weight, total_weight)
+        for item in items:
+            if item.available:
+                item.weight = self._normalize_weight(item.weight, total_weight)
+            else:
+                item.weight = 0.0
         return sum(item.weighted for item in available_items), items, []
 
     @staticmethod
@@ -143,22 +148,30 @@ class DecisionEngine:
     @staticmethod
     def confidence(provider_quality, freshness, consistency, completeness, technical_data_quality=None,
                    coverage=100.0, valuation_quality=None):
-        values = [
-            (provider_quality, 0.243),
-            (freshness, 0.162),
-            (consistency, 0.243),
-            (completeness, 0.162),
-            (technical_data_quality, 0.090),
-            (DecisionEngine._quality_score(valuation_quality), 0.100),
+        core = [
+            (provider_quality, 0.30),
+            (freshness, 0.20),
+            (consistency, 0.30),
+            (completeness, 0.20),
         ]
-        available = [(max(0.0, min(100.0, float(v))), w) for v, w in values if v is not None]
+        available = [(max(0.0, min(100.0, float(v))), w) for v, w in core if v is not None]
         if not available:
             return 0.0
         total_weight = sum(w for _, w in available)
-        weighted_quality = sum(v * w for v, w in available) / total_weight
-        evidence_coverage = total_weight / sum(w for _, w in values)
+        quality = sum(v * w for v, w in available) / total_weight
+        evidence_coverage = total_weight
+
+        # Optional modifiers only participate when real values are supplied;
+        # their absence is not treated as a negative or a fabricated score.
+        technical = DecisionEngine._quality_score(technical_data_quality)
+        if technical is not None:
+            quality = quality * 0.90 + technical * 0.10
+        valuation = DecisionEngine._quality_score(valuation_quality)
+        if valuation is not None:
+            quality = quality * 0.90 + valuation * 0.10
+
         decision_coverage = max(0.0, min(100.0, float(coverage))) / 100.0
-        return round(weighted_quality * evidence_coverage * decision_coverage, 2)
+        return round(quality * evidence_coverage * decision_coverage, 2)
 
     def evaluate(self, strategic_scores, tactical_scores, confidence_inputs, strengths=None, red_flags=None, contextual=None):
         strategic_total, strategic_items, strategic_warnings = self.strategic(strategic_scores)
