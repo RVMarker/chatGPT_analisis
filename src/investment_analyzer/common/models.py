@@ -1,6 +1,6 @@
 """
 models.py
-Investment Analyzer v11
+Investment Analyzer v12
 
 Modelos comunes utilizados por todos los módulos.
 """
@@ -81,6 +81,7 @@ class CashFlow:
     recurring_capex: float | None = None
     dividends_paid_period: str | None = None
     distribution_source: str | None = None
+    historical_fcf: list[float] = field(default_factory=list)
 
 @dataclass(slots=True)
 class FinancialStatements:
