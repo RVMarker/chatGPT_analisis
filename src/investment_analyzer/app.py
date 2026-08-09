@@ -104,8 +104,11 @@ def attach_trade_plan(context, capital=5000.0, risk_pct=0.02, max_position_pct=0
         risk_pct=risk_pct,
         max_position_pct=max_position_pct,
     )
-    strategic = getattr(context.decision, "strategic_decision", None)
-    context.metadata["final_decision"] = finalize_decision(strategic, context.trade_plan)
+    metadata = getattr(context, "metadata", None)
+    if isinstance(metadata, dict):
+        decision = getattr(context, "decision", None)
+        strategic = getattr(decision, "strategic_decision", None) if decision is not None else None
+        metadata["final_decision"] = finalize_decision(strategic, context.trade_plan)
     return context.trade_plan
 
 
@@ -114,5 +117,5 @@ def run_application(ticker: str, capital=5000.0, risk_pct=0.02, max_position_pct
     context = pipeline.run(ticker)
     attach_trade_plan(context, capital=capital, risk_pct=risk_pct, max_position_pct=max_position_pct)
     print(render_decision_report(context))
-    print(render_trade_plan(context.trade_plan, context.metadata.get("final_decision")))
+    print(render_trade_plan(context.trade_plan, getattr(context, "metadata", {}).get("final_decision")))
     return 0
